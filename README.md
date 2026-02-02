@@ -54,7 +54,6 @@ After reboot:
 cd cilium-packetbeat-poc
 ./setup/01-install-tools.sh
 ./setup/02-create-cluster-rootful.sh
-./setup/03-verify-setup.sh
 ```
 
 ### 2. Deploy Monitoring Stack

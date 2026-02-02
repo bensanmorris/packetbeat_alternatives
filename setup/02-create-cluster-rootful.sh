@@ -72,27 +72,19 @@ echo "Fixing kubectl permissions..."
 # Get the actual kubeconfig path
 KUBECONFIG_PATH="${HOME}/.kube/config"
 
-# If root created the kubeconfig, copy it to user's home and fix permissions
-if [ -f "/root/.kube/config" ]; then
-    echo "Copying kubeconfig from root to user directory..."
-    sudo mkdir -p "${HOME}/.kube"
-    sudo cp /root/.kube/config "${KUBECONFIG_PATH}"
-    sudo chown $(id -u):$(id -g) "${KUBECONFIG_PATH}"
-    sudo chmod 600 "${KUBECONFIG_PATH}"
-fi
+# Always get fresh kubeconfig from the newly created cluster
+echo "Getting kubeconfig from cluster..."
+sudo mkdir -p "${HOME}/.kube"
+sudo -E KIND_EXPERIMENTAL_PROVIDER=podman "$KIND_PATH" get kubeconfig --name cilium-poc > "${KUBECONFIG_PATH}.tmp"
+
+# Move it to the right place and fix permissions
+mv "${KUBECONFIG_PATH}.tmp" "${KUBECONFIG_PATH}"
+chmod 600 "${KUBECONFIG_PATH}"
 
 # Ensure user owns their .kube directory
-sudo chown -R $(id -u):$(id -g) "${HOME}/.kube" 2>/dev/null || true
+chown -R $(id -u):$(id -g) "${HOME}/.kube"
 
-# Verify the context exists
-if kubectl config get-contexts kind-cilium-poc &>/dev/null; then
-    echo "✓ kubectl context configured"
-else
-    echo "⚠️  kubectl context not found, setting it up..."
-    # Try to get the context from the kind cluster
-    sudo -E KIND_EXPERIMENTAL_PROVIDER=podman "$KIND_PATH" get kubeconfig --name cilium-poc > "${KUBECONFIG_PATH}"
-    chmod 600 "${KUBECONFIG_PATH}"
-fi
+echo "✓ kubectl context configured"
 
 # Verify cluster
 echo ""

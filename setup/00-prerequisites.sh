@@ -26,7 +26,14 @@ echo "Step 2: Installing Podman (if not already installed)..."
 dnf install -y podman podman-plugins
 
 echo "Step 3: Checking cgroup version..."
-CGROUP_VERSION=$(podman info --format '{{.Host.CGroupsVersion}}')
+# Use grep method which works across different Podman versions
+if podman info 2>/dev/null | grep -q "cgroupVersion: v2"; then
+    CGROUP_VERSION="v2"
+elif podman info 2>/dev/null | grep -q "cgroup version: 2"; then
+    CGROUP_VERSION="v2"
+else
+    CGROUP_VERSION="v1"
+fi
 echo "Current cgroup version: $CGROUP_VERSION"
 
 if [ "$CGROUP_VERSION" != "v2" ]; then

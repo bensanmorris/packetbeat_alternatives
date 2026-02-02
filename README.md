@@ -10,7 +10,7 @@ cilium-packetbeat-poc/
 ├── setup/
 │   ├── 00-prerequisites.sh      # System prerequisites setup
 │   ├── 01-install-tools.sh      # Install Kind, kubectl, Cilium CLI, Hubble CLI
-│   ├── 02-create-cluster.sh     # Create Kind cluster with Podman
+│   ├── 02-create-cluster-rootful.sh # Create Kind cluster with Podman
 │   └── 03-verify-setup.sh       # Verify installation
 ├── deploy/
 │   ├── kind-config.yaml         # Kind cluster configuration
@@ -53,8 +53,7 @@ After reboot:
 ```bash
 cd cilium-packetbeat-poc
 ./setup/01-install-tools.sh
-./setup/02-create-cluster.sh
-./setup/03-verify-setup.sh
+./setup/02-create-cluster-rootful.sh
 ```
 
 ### 2. Deploy Monitoring Stack

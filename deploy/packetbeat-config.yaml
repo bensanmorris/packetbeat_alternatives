@@ -1,0 +1,81 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: packetbeat-config
+  namespace: monitoring
+  labels:
+    app: packetbeat
+data:
+  packetbeat.yml: |-
+    # Network interface to capture from
+    packetbeat.interfaces.device: any
+    
+    # Protocols to monitor
+    packetbeat.protocols:
+    - type: icmp
+      enabled: true
+    
+    - type: dns
+      ports: [53]
+      include_authorities: true
+      include_additionals: true
+    
+    - type: http
+      ports: [80, 8000, 8080, 8081, 9200]
+      send_request: true
+      send_response: true
+      include_body_for: ["application/json", "text/html"]
+      real_ip_header: "X-Forwarded-For"
+    
+    - type: tls
+      ports: [443, 993, 995, 5223, 8443]
+      send_certificates: true
+    
+    - type: mysql
+      ports: [3306]
+    
+    - type: pgsql
+      ports: [5432]
+    
+    - type: redis
+      ports: [6379]
+    
+    - type: mongodb
+      ports: [27017]
+    
+    # Network flows
+    packetbeat.flows:
+      timeout: 30s
+      period: 10s
+    
+    # Output to file for comparison
+    output.file:
+      path: "/captures"
+      filename: packetbeat
+      rotate_every_kb: 10000
+      number_of_files: 50
+      codec.json:
+        pretty: false
+    
+    # Logging
+    logging.level: info
+    logging.to_files: true
+    logging.files:
+      path: /var/log/packetbeat
+      name: packetbeat
+      keepfiles: 7
+      permissions: 0644
+    
+    # Processors
+    processors:
+      - add_host_metadata:
+          netinfo.enabled: true
+      - add_kubernetes_metadata:
+          host: ${NODE_NAME}
+          indexers:
+            - ip_port:
+            - container:
+      - drop_event:
+          when:
+            equals:
+              source.ip: "127.0.0.1"

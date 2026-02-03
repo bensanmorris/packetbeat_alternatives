@@ -1,6 +1,7 @@
 # Cilium vs Packetbeat POC - RHEL9 + Podman
 
-This package contains everything needed to run a side-by-side comparison of Cilium/Hubble and Packetbeat on RHEL9 using Podman.
+Packetbeat being designed around Elastic ingest is quite verbose (approx 2-5k of metadata per event) vs Cilium's 200-500 bytes. This repo contains everything needed to run a side-by-side comparison of Cilium/Hubble and Packetbeat on RHEL9 using Podman.
+
 
 ## Contents
 

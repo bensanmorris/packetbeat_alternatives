@@ -27,76 +27,79 @@ for pod in $PACKETBEAT_PODS; do
 done
 
 echo ""
-echo "Step 3: Extracting capture files from Kind nodes..."
+echo "Step 3: Extracting capture files from Packetbeat pods..."
 
-# Get Kind nodes
-NODES=$(kubectl get nodes -o jsonpath='{.items[*].metadata.name}')
-
-for node in $NODES; do
-    echo "  Extracting from node: $node..."
+# Extract directly from pods instead of Kind nodes
+for pod in $PACKETBEAT_PODS; do
+    echo "  Extracting captures from $pod..."
     
-    # The node name in Kind corresponds to a Podman container
-    CONTAINER_NAME="cilium-poc-${node}"
+    # Create pod-specific directory
+    POD_DIR="$DATA_DIR/$pod"
+    mkdir -p "$POD_DIR"
     
-    # Create node-specific directory
-    NODE_DIR="$DATA_DIR/$node"
-    mkdir -p "$NODE_DIR"
-    
-    # Copy capture files from the container
-    if podman exec "$CONTAINER_NAME" test -d /var/log/packetbeat-captures 2>/dev/null; then
-        podman exec "$CONTAINER_NAME" tar czf - /var/log/packetbeat-captures 2>/dev/null | \
-            tar xzf - -C "$NODE_DIR" --strip-components=3 2>/dev/null || {
-            echo "    ⚠️  Could not extract captures from $node"
+    # Copy capture files from the pod's /captures directory
+    if kubectl exec -n monitoring "$pod" -- test -d /captures 2>/dev/null; then
+        # Use kubectl cp to copy the entire directory
+        kubectl cp "monitoring/$pod:/captures" "$POD_DIR/captures" 2>/dev/null || {
+            echo "    ⚠️  Could not copy captures from $pod using kubectl cp"
+            echo "    Trying tar method..."
+            
+            # Alternative: use tar over kubectl exec
+            kubectl exec -n monitoring "$pod" -- tar czf - /captures 2>/dev/null | \
+                tar xzf - -C "$POD_DIR" --strip-components=1 2>/dev/null || {
+                echo "    ⚠️  Could not extract captures from $pod"
+            }
         }
     else
-        echo "    ⚠️  No captures directory found on $node"
-    fi
-    
-    # Also get the logs from the container
-    if podman exec "$CONTAINER_NAME" test -d /var/log/packetbeat 2>/dev/null; then
-        podman exec "$CONTAINER_NAME" tar czf - /var/log/packetbeat 2>/dev/null | \
-            tar xzf - -C "$NODE_DIR" --strip-components=3 2>/dev/null || true
+        echo "    ⚠️  No /captures directory found in $pod"
     fi
 done
 
 echo ""
 echo "Step 4: Combining JSON capture data..."
-# Combine all JSON files
-find "$DATA_DIR" -name "packetbeat*" -type f -print0 2>/dev/null | \
-    while IFS= read -r -d '' file; do
-        cat "$file" 2>/dev/null
-    done | jq -s '.' > "$DATA_DIR/packetbeat-combined.json" 2>/dev/null || {
-    echo "  ⚠️  Could not combine JSON data"
-    echo "  Raw files are still available in $DATA_DIR"
-}
+# Combine all .ndjson files from all pods
+COMBINED_FILE="$DATA_DIR/packetbeat-combined.json"
+> "$COMBINED_FILE"  # Create empty file
+
+# Find all ndjson files and concatenate them
+find "$DATA_DIR" -name "*.ndjson" -type f 2>/dev/null | while read -r file; do
+    echo "  Processing $file..."
+    cat "$file" >> "$COMBINED_FILE" 2>/dev/null || true
+done
+
+# Count lines in combined file
+LINE_COUNT=$(wc -l < "$COMBINED_FILE" 2>/dev/null || echo "0")
+echo "  Combined $LINE_COUNT events into $COMBINED_FILE"
 
 echo ""
 echo "Step 5: Generating Packetbeat statistics..."
-if [ -f "$DATA_DIR/packetbeat-combined.json" ]; then
+if [ -s "$COMBINED_FILE" ]; then
     cat > "$DATA_DIR/packetbeat-stats.txt" <<EOF
 Packetbeat Statistics
 =====================
 
-Total events: $(cat "$DATA_DIR/packetbeat-combined.json" | jq 'length' 2>/dev/null || echo "0")
+Total events: $LINE_COUNT
 
-Event types:
-$(cat "$DATA_DIR/packetbeat-combined.json" | jq -r '.[] | .type // "unknown"' 2>/dev/null | sort | uniq -c | sort -rn)
+File size: $(du -h "$COMBINED_FILE" | cut -f1)
 
-Protocols:
-$(cat "$DATA_DIR/packetbeat-combined.json" | jq -r '.[] | .network.protocol // "unknown"' 2>/dev/null | sort | uniq -c | sort -rn)
+Event types (sample):
+$(head -100 "$COMBINED_FILE" | jq -r '.type // "unknown"' 2>/dev/null | sort | uniq -c | sort -rn || echo "  (jq parsing failed)")
 
-Status codes (HTTP):
-$(cat "$DATA_DIR/packetbeat-combined.json" | jq -r '.[] | select(.type=="http") | .http.response.status_code // "unknown"' 2>/dev/null | sort | uniq -c | sort -rn)
+Protocols (sample):
+$(head -100 "$COMBINED_FILE" | jq -r '.network.protocol // "unknown"' 2>/dev/null | sort | uniq -c | sort -rn || echo "  (jq parsing failed)")
 
-Top source IPs:
-$(cat "$DATA_DIR/packetbeat-combined.json" | jq -r '.[] | .source.ip // "unknown"' 2>/dev/null | sort | uniq -c | sort -rn | head -10)
+Top source IPs (sample):
+$(head -100 "$COMBINED_FILE" | jq -r '.source.ip // "unknown"' 2>/dev/null | sort | uniq -c | sort -rn | head -10 || echo "  (jq parsing failed)")
 
-Top destination IPs:
-$(cat "$DATA_DIR/packetbeat-combined.json" | jq -r '.[] | .destination.ip // "unknown"' 2>/dev/null | sort | uniq -c | sort -rn | head -10)
+Raw files location:
 EOF
+
+    # List all captured files
+    find "$DATA_DIR" -name "*.ndjson" -type f -exec ls -lh {} \; >> "$DATA_DIR/packetbeat-stats.txt"
+    
     echo "  ✓ Statistics generated"
 else
-    echo "  ⚠️  No combined JSON data available for statistics"
+    echo "  ⚠️  No capture data found"
 fi
 
 echo ""

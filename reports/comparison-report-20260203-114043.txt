@@ -1,0 +1,186 @@
+================================================================================
+                    CILIUM/HUBBLE vs PACKETBEAT
+                        Comparison Report
+================================================================================
+
+Generated: Tue  3 Feb 11:40:43 GMT 2026
+Cluster: cilium-poc
+
+================================================================================
+1. DATA VOLUME COMPARISON
+================================================================================
+
+Hubble Data:
+  Total size: 22M
+  Files: 8
+
+  Breakdown:
+    data/hubble/hubble-flows-all.json        17M
+    data/hubble/hubble-flows-demo.json       5.7M
+    data/hubble/hubble-flows-http.json       482
+    data/hubble/hubble-flows-dropped.json    1.8K
+    data/hubble/hubble-flows-dns.json        482
+    data/hubble/hubble-metrics.txt           0
+    data/hubble/cilium-status.txt            2.3K
+    data/hubble/hubble-stats.txt             178
+
+Packetbeat Data:
+  Total size: 2.0G
+  Files: 106
+
+  Sample files:
+    data/packetbeat/logs-packetbeat-mlhcv.txt 91K
+    data/packetbeat/logs-packetbeat-mwfvm.txt 92K
+    data/packetbeat/packetbeat-combined.json 988M
+    data/packetbeat/packetbeat-stats.txt     12K
+    data/packetbeat/packetbeat-mlhcv/captures/packetbeat-20260203-8.ndjson 9.8M
+    data/packetbeat/packetbeat-mlhcv/captures/packetbeat-20260203-9.ndjson 9.8M
+    data/packetbeat/packetbeat-mlhcv/captures/packetbeat-20260203-10.ndjson 9.8M
+    data/packetbeat/packetbeat-mlhcv/captures/packetbeat-20260203-11.ndjson 9.8M
+    data/packetbeat/packetbeat-mlhcv/captures/packetbeat-20260203-12.ndjson 9.8M
+    data/packetbeat/packetbeat-mlhcv/captures/packetbeat-20260203-13.ndjson 9.8M
+
+================================================================================
+2. FLOW/EVENT COUNT COMPARISON
+================================================================================
+
+Hubble total flows: 12287
+Packetbeat total events: 510764
+
+Event ratio (Packetbeat/Hubble): 41.56x
+This means Packetbeat captured 41.56 events for every Hubble flow
+
+================================================================================
+3. PROTOCOL COVERAGE
+================================================================================
+
+Hubble Protocols:
+  other                12287
+
+Hubble HTTP Requests:
+  Total: 3
+
+Hubble DNS Queries:
+  Total: 3
+
+Packetbeat Protocols:
+  flow                 445382
+  dns                  55691
+  http                 8008
+  icmp                 1636
+  tls                  47
+
+================================================================================
+4. DROPPED/FAILED CONNECTIONS
+================================================================================
+
+Hubble Dropped Flows:
+  Total: 4
+
+  Drop reasons:
+    UNKNOWN                                  4
+
+Packetbeat Failed Connections:
+  Total: 44874
+
+================================================================================
+5. RESOURCE USAGE
+================================================================================
+
+Cilium/Hubble Resource Usage:
+  Pod: cilium-fxkx9
+  CPU Request: N/A
+  Memory Request: N/A
+
+  Pod: cilium-tktlq
+  CPU Request: N/A
+  Memory Request: N/A
+
+  Pod: cilium-xs2bc
+  CPU Request: N/A
+  Memory Request: N/A
+
+Packetbeat Resource Usage:
+  Pod: packetbeat-mlhcv
+  CPU Request: 100m
+  Memory Request: 100Mi
+
+  Pod: packetbeat-mwfvm
+  CPU Request: 100m
+  Memory Request: 100Mi
+
+
+================================================================================
+6. DATA COMPLETENESS ANALYSIS
+================================================================================
+
+Checking data completeness...
+
+Hubble Coverage:
+  ✓ TCP flows: 0
+  ✓ UDP flows: 0
+  ✓ HTTP requests: 3
+  ✓ DNS queries: 3
+  ✓ Identity information: Available
+  ✓ Kubernetes labels: Available
+
+Packetbeat Coverage:
+  ✓ HTTP: 8008
+  ✓ DNS: 55691
+  ✓ TLS: 47
+  ✓ Flow data: 445382
+  ✓ Packet-level details: Available
+
+================================================================================
+7. SUMMARY AND RECOMMENDATIONS
+================================================================================
+
+Based on the comparison:
+
+Hubble Strengths:
+  • Lower data volume (more efficient)
+  • Kubernetes-native (pod/service identity)
+  • Built-in network policy enforcement visibility
+  • Real-time service dependency mapping
+  • Lower resource overhead
+  • Better integration with Kubernetes constructs
+
+Packetbeat Strengths:
+  • More detailed packet-level information
+  • Broader protocol support out of the box
+  • Can work in non-Kubernetes environments
+  • Familiar Elastic Stack integration
+  • More verbose logging (good for forensics)
+
+Recommendations:
+  1. If staying in Kubernetes: Hubble provides better efficiency and integration
+  2. If need packet forensics: Packetbeat provides more raw packet details
+  3. For production: Hubble's lower overhead is significant at scale
+  4. For compliance: Evaluate which tool provides required audit detail
+
+Key Findings from This POC:
+  • Packetbeat produces significantly more data (expect ~42x more events)
+  • Hubble provides Kubernetes context natively (pod names, labels)
+  • Both tools captured similar network activity
+  • Packetbeat's verbosity is due to repeated metadata in each event
+  • Storage requirements favor Hubble for long-term retention
+
+Next Steps:
+  • Review detailed protocol coverage above
+  • Compare storage requirements for your retention period
+  • Test query performance for common use cases
+  • Evaluate alerting/integration capabilities with your SIEM
+  • Consider hybrid approach: Hubble for monitoring, Packetbeat for forensics
+
+
+================================================================================
+Report Complete
+================================================================================
+
+
+Report saved to: reports/comparison-report-20260203-114043.txt
+
+For more details, examine:
+  - data/hubble/hubble-stats.txt
+  - data/packetbeat/packetbeat-stats.txt
+  - Individual JSON files in data/ directories

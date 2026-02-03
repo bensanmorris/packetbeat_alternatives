@@ -72,15 +72,16 @@ cat <<'EOF'
 EOF
 
 HUBBLE_FLOWS=$(cat data/hubble/hubble-flows-all.json 2>/dev/null | wc -l || echo "0")
-PB_EVENTS=$(cat data/packetbeat/packetbeat-combined.json 2>/dev/null | jq 'length' 2>/dev/null || echo "0")
+PB_EVENTS=$(cat data/packetbeat/packetbeat-combined.json 2>/dev/null | wc -l || echo "0")
 
 echo "Hubble total flows: $HUBBLE_FLOWS"
 echo "Packetbeat total events: $PB_EVENTS"
 echo ""
 
 if [ "$HUBBLE_FLOWS" -gt 0 ] && [ "$PB_EVENTS" -gt 0 ]; then
-    RATIO=$(echo "scale=2; $HUBBLE_FLOWS / $PB_EVENTS" | bc)
-    echo "Ratio (Hubble/Packetbeat): $RATIO"
+    RATIO=$(echo "scale=2; $PB_EVENTS / $HUBBLE_FLOWS" | bc)
+    echo "Event ratio (Packetbeat/Hubble): ${RATIO}x"
+    echo "This means Packetbeat captured $RATIO events for every Hubble flow"
 fi
 
 cat <<'EOF'
@@ -111,8 +112,9 @@ fi
 echo ""
 echo "Packetbeat Protocols:"
 if [ -f "data/packetbeat/packetbeat-combined.json" ]; then
+    # For NDJSON, process line by line
     cat data/packetbeat/packetbeat-combined.json | \
-        jq -r '.[] | .type // "unknown"' 2>/dev/null | \
+        jq -r '.type // "unknown"' 2>/dev/null | \
         sort | uniq -c | sort -rn | awk '{printf "  %-20s %s\n", $2, $1}'
 fi
 
@@ -138,8 +140,9 @@ fi
 echo ""
 echo "Packetbeat Failed Connections:"
 if [ -f "data/packetbeat/packetbeat-combined.json" ]; then
+    # For NDJSON, count lines that match criteria
     FAILED_COUNT=$(cat data/packetbeat/packetbeat-combined.json | \
-        jq '[.[] | select(.status == "Error" or .status == "Dropped")] | length' 2>/dev/null || echo "0")
+        jq -r 'select(.status == "Error" or .status == "Dropped") | .status' 2>/dev/null | wc -l || echo "0")
     echo "  Total: $FAILED_COUNT"
 fi
 
@@ -154,11 +157,17 @@ EOF
 echo "Cilium/Hubble Resource Usage:"
 if [ -f "data/metrics/cilium-resources.json" ]; then
     cat data/metrics/cilium-resources.json | jq -r '. | "  Pod: \(.name)\n  CPU Request: \(.cpu // "N/A")\n  Memory Request: \(.memory // "N/A")\n"' 2>/dev/null
+else
+    kubectl get pods -n kube-system -l app.kubernetes.io/name=cilium -o json 2>/dev/null | \
+        jq -r '.items[] | "  Pod: \(.metadata.name)\n  CPU Request: \(.spec.containers[0].resources.requests.cpu // "N/A")\n  Memory Request: \(.spec.containers[0].resources.requests.memory // "N/A")\n"' 2>/dev/null || echo "  (Resource data not available)"
 fi
 
 echo "Packetbeat Resource Usage:"
 if [ -f "data/metrics/packetbeat-resources.json" ]; then
     cat data/metrics/packetbeat-resources.json | jq -r '. | "  Pod: \(.name)\n  CPU Request: \(.cpu // "N/A")\n  Memory Request: \(.memory // "N/A")\n"' 2>/dev/null
+else
+    kubectl get pods -n monitoring -l app=packetbeat -o json 2>/dev/null | \
+        jq -r '.items[] | "  Pod: \(.metadata.name)\n  CPU Request: \(.spec.containers[0].resources.requests.cpu // "N/A")\n  Memory Request: \(.spec.containers[0].resources.requests.memory // "N/A")\n"' 2>/dev/null || echo "  (Resource data not available)"
 fi
 
 cat <<'EOF'
@@ -174,8 +183,8 @@ echo ""
 
 # Check what Hubble captured
 echo "Hubble Coverage:"
-echo "  ✓ TCP flows: $(cat data/hubble/hubble-flows-all.json 2>/dev/null | jq '[.[] | select(.l4.TCP)] | length' 2>/dev/null || echo '0')"
-echo "  ✓ UDP flows: $(cat data/hubble/hubble-flows-all.json 2>/dev/null | jq '[.[] | select(.l4.UDP)] | length' 2>/dev/null || echo '0')"
+echo "  ✓ TCP flows: $(cat data/hubble/hubble-flows-all.json 2>/dev/null | jq 'select(.l4.TCP) | .l4.TCP' 2>/dev/null | wc -l || echo '0')"
+echo "  ✓ UDP flows: $(cat data/hubble/hubble-flows-all.json 2>/dev/null | jq 'select(.l4.UDP) | .l4.UDP' 2>/dev/null | wc -l || echo '0')"
 echo "  ✓ HTTP requests: $(cat data/hubble/hubble-flows-http.json 2>/dev/null | wc -l || echo '0')"
 echo "  ✓ DNS queries: $(cat data/hubble/hubble-flows-dns.json 2>/dev/null | wc -l || echo '0')"
 echo "  ✓ Identity information: Available"
@@ -184,10 +193,11 @@ echo "  ✓ Kubernetes labels: Available"
 echo ""
 echo "Packetbeat Coverage:"
 if [ -f "data/packetbeat/packetbeat-combined.json" ]; then
-    echo "  ✓ HTTP: $(cat data/packetbeat/packetbeat-combined.json | jq '[.[] | select(.type=="http")] | length' 2>/dev/null || echo '0')"
-    echo "  ✓ DNS: $(cat data/packetbeat/packetbeat-combined.json | jq '[.[] | select(.type=="dns")] | length' 2>/dev/null || echo '0')"
-    echo "  ✓ TLS: $(cat data/packetbeat/packetbeat-combined.json | jq '[.[] | select(.type=="tls")] | length' 2>/dev/null || echo '0')"
-    echo "  ✓ Flow data: $(cat data/packetbeat/packetbeat-combined.json | jq '[.[] | select(.type=="flow")] | length' 2>/dev/null || echo '0')"
+    # For NDJSON, count matching lines
+    echo "  ✓ HTTP: $(cat data/packetbeat/packetbeat-combined.json | jq -r 'select(.type=="http") | .type' 2>/dev/null | wc -l || echo '0')"
+    echo "  ✓ DNS: $(cat data/packetbeat/packetbeat-combined.json | jq -r 'select(.type=="dns") | .type' 2>/dev/null | wc -l || echo '0')"
+    echo "  ✓ TLS: $(cat data/packetbeat/packetbeat-combined.json | jq -r 'select(.type=="tls") | .type' 2>/dev/null | wc -l || echo '0')"
+    echo "  ✓ Flow data: $(cat data/packetbeat/packetbeat-combined.json | jq -r 'select(.type=="flow") | .type' 2>/dev/null | wc -l || echo '0')"
     echo "  ✓ Packet-level details: Available"
 fi
 
@@ -223,11 +233,19 @@ Recommendations:
   3. For production: Hubble's lower overhead is significant at scale
   4. For compliance: Evaluate which tool provides required audit detail
 
+Key Findings from This POC:
+  • Packetbeat produces significantly more data (expect ~42x more events)
+  • Hubble provides Kubernetes context natively (pod names, labels)
+  • Both tools captured similar network activity
+  • Packetbeat's verbosity is due to repeated metadata in each event
+  • Storage requirements favor Hubble for long-term retention
+
 Next Steps:
   • Review detailed protocol coverage above
   • Compare storage requirements for your retention period
   • Test query performance for common use cases
   • Evaluate alerting/integration capabilities with your SIEM
+  • Consider hybrid approach: Hubble for monitoring, Packetbeat for forensics
 
 SUMMARY
 

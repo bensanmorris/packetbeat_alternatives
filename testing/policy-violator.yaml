@@ -1,0 +1,73 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: policy-violation-scenarios
+  namespace: demo
+data:
+  violations.sh: |
+    #!/bin/bash
+    # Network Policy Violation Generator
+    
+    echo "=== Network Policy Violation Test ==="
+    echo "This pod will attempt connections that should be blocked"
+    echo ""
+    
+    while true; do
+      echo "$(date): Testing network policy violations..."
+      
+      # Test 1: Try to access restricted-service (should be blocked)
+      echo "  [POLICY] Attempting to access restricted-service..."
+      curl -s --connect-timeout 2 http://restricted-service:80/ && echo "  ✓ Connected (UNEXPECTED)" || echo "  ✗ Blocked (EXPECTED)"
+      
+      # Test 2: Try to access backend from non-frontend pod (should be blocked if policy active)
+      echo "  [POLICY] Attempting to access backend (not from frontend)..."
+      curl -s --connect-timeout 2 http://backend:80/ && echo "  ✓ Connected" || echo "  ✗ Blocked"
+      
+      # Test 3: Try to access external IP (if egress policy active)
+      echo "  [POLICY] Attempting external access (8.8.8.8)..."
+      curl -s --connect-timeout 2 http://8.8.8.8:80/ && echo "  ✓ Connected" || echo "  ✗ Blocked or timeout"
+      
+      # Test 4: Try accessing on wrong port
+      echo "  [POLICY] Attempting wrong port access..."
+      curl -s --connect-timeout 2 http://backend:8080/ && echo "  ✓ Connected" || echo "  ✗ Blocked or refused"
+      
+      # Test 5: Try cross-namespace access (if policies exist)
+      echo "  [POLICY] Attempting cross-namespace access..."
+      curl -s --connect-timeout 2 http://kubernetes.default.svc.cluster.local:443/ && echo "  ✓ Connected" || echo "  ✗ Blocked or different error"
+      
+      echo ""
+      echo "Sleeping 30 seconds..."
+      sleep 30
+    done
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: policy-violator
+  namespace: demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: policy-violator
+      role: unauthorized
+  template:
+    metadata:
+      labels:
+        app: policy-violator
+        role: unauthorized
+    spec:
+      containers:
+      - name: violator
+        image: curlimages/curl:latest
+        command: ["/bin/sh", "/scripts/violations.sh"]
+        volumeMounts:
+        - name: scenarios
+          mountPath: /scripts
+      volumes:
+      - name: scenarios
+        configMap:
+          name: policy-violation-scenarios
+          defaultMode: 0755

@@ -38,45 +38,169 @@ One-command deployment of all test scenarios
 ### 6. **analyze-error-scenarios.sh**
 Analyzes collected data specifically for error scenarios and generates comparison report
 
-## Quick Start
+## Quick Start (Post-Reboot / Fresh Start)
 
-### Deploy Error Scenarios
+### Step 1: Check Cluster Status
+```bash
+cd ~/packetbeat_alternatives
+
+# Check if Kind cluster is still running
+sudo kind get clusters
+
+# If cluster exists, check if it's healthy
+kubectl get nodes
+```
+
+**Expected output if running:**
+```
+NAME                       STATUS   ROLES           AGE   VERSION
+cilium-poc-control-plane   Ready    control-plane   1d    v1.27.3
+cilium-poc-worker          Ready    <none>          1d    v1.27.3
+cilium-poc-worker2         Ready    <none>          1d    v1.27.3
+```
+
+### Step 2a: If Cluster Running ✅
 
 ```bash
-# Deploy all scenarios
+# Check Cilium status
+cilium status
+
+# Check existing pods
+kubectl get pods -n demo
+kubectl get pods -n monitoring
+
+# Start Hubble port-forwarding
+cilium hubble port-forward &
+
+# Skip to Step 3!
+```
+
+### Step 2b: If Cluster NOT Running ❌
+
+```bash
+# Recreate the cluster (takes ~3 minutes)
+cd setup
+./02-create-cluster-rootful.sh
+
+# Install Cilium
+cd ../deploy
+./cilium-install.sh
+
+# Start Hubble port-forwarding
+cilium hubble port-forward &
+
+# Deploy Packetbeat
+kubectl apply -f packetbeat-daemonset.yaml
+kubectl apply -f packetbeat-config.yaml
+
+# Deploy original test app
+kubectl apply -f test-app.yaml
+
+# Wait for everything to be ready
+kubectl wait --for=condition=ready pod --all -n demo --timeout=120s
+kubectl wait --for=condition=ready pod --all -n monitoring --timeout=120s
+```
+
+### Step 3: Deploy Error Scenarios
+
+```bash
+
+# Deploy all error scenarios
 ./testing/deploy-error-scenarios.sh
+```
+
+**Expected output:**
+```
+=== Deploying Error Scenario Tests ===
+
+Step 1: Deploying enhanced backend with error responses...
+deployment.apps/backend-error-capable created
+...
+
+=== Error Scenarios Deployed ===
+```
+
+### Step 4: Verify Deployment
+
+```bash
+# Check all pods are running
+kubectl get pods -n demo
+
+# Should see:
+# - error-generator
+# - policy-violator  
+# - backend-error-capable
+# - restricted-service
+# - isolated-pod
+# Plus original: frontend, backend, database
 ```
 
 ### Monitor Live
 
+Open multiple terminal windows to watch different aspects:
+
+**Terminal 1 - Watch Hubble capture policy violations:**
 ```bash
-# Watch Hubble capture policy violations
 hubble observe --namespace demo --verdict DROPPED
+```
 
-# Watch error generator logs
+**Terminal 2 - Watch error generator logs:**
+```bash
 kubectl logs -f -n demo deployment/error-generator
+```
 
-# Watch policy violator attempts
+**Terminal 3 - Watch policy violator attempts:**
+```bash
 kubectl logs -f -n demo deployment/policy-violator
+```
 
-# Check network policies
+**Terminal 4 - Check network policies:**
+```bash
 kubectl get networkpolicies -n demo
 ```
 
+### Let It Run
+
+**Recommended duration:**
+- **Minimum**: 10-15 minutes (proof of concept)
+- **Better**: 30-60 minutes (decent data)
+- **Best**: 2-4 hours (comprehensive results)
+
+The error generators run continuously every 30 seconds.
+
 ### Collect Data
 
-Let scenarios run for at least 10-30 minutes, then:
+Let scenarios run for a chosen duration, then:
 
 ```bash
-cd collection
+cd ~/packetbeat_alternatives/collection
 ./export-all.sh
 ```
+
+This will take a few minutes depending on data volume.
 
 ### Analyze Results
 
 ```bash
-cd ../analysis
+cd ~/packetbeat_alternatives/analysis
 ./analyze-error-scenarios.sh
+```
+
+**Output:**
+```
+=== Analyzing Error Scenario Results ===
+
+Report saved to: reports/error-scenarios-20260203-153000.txt
+```
+
+### Review Report
+
+```bash
+# View the report
+cat reports/error-scenarios-*.txt | less
+
+# Or open in your preferred editor
+vim reports/error-scenarios-*.txt
 ```
 
 ## What Gets Tested
@@ -84,7 +208,7 @@ cd ../analysis
 ### ✅ HTTP Error Detection
 - **Cilium**: Requires L7 visibility enabled
 - **Packetbeat**: Always captures HTTP status codes
-- **Winner**: TBD based on the data
+- **Winner**: TBD based on your data
 
 ### ✅ Network Policy Violations (Cilium's Killer Feature)
 - **Cilium**: Shows which policy blocked, which pod, why
@@ -106,9 +230,52 @@ cd ../analysis
 - **Packetbeat**: Packet-level timing detail
 - **Winner**: Packetbeat for deep timing analysis
 
+## Quick Reference Checklist
+
+```bash
+# 1. Boot VM and navigate
+cd ~/packetbeat_alternatives
+
+# 2. Check cluster
+kubectl get nodes
+
+# 3. If needed, recreate cluster
+./setup/02-create-cluster-rootful.sh
+./deploy/cilium-install.sh
+cilium hubble port-forward &
+kubectl apply -f deploy/packetbeat-daemonset.yaml deploy/packetbeat-config.yaml deploy/test-app.yaml
+
+# 4. Deploy error scenarios
+./testing/deploy-error-scenarios.sh
+
+# 5. Monitor (let run 30+ minutes)
+kubectl logs -f -n demo deployment/error-generator
+
+# 6. Collect
+./collection/export-all.sh
+
+# 7. Analyze
+./analysis/analyze-error-scenarios.sh
+
+# 8. Review
+cat reports/error-scenarios-*.txt
+```
+
+## Time Estimates
+
+| Step | Time |
+|------|------|
+| VM boot | 1-2 min |
+| Cluster check | 30 sec |
+| Cluster recreate (if needed) | 3-5 min |
+| Cilium install | 2-3 min |
+| Deploy error scenarios | 1-2 min |
+| **Total cold start** | **8-13 min** |
+| **Total if cluster running** | **2-3 min** |
+
 ## Key Insights You'll Get
 
-1. **Can Cilium detect the errors we care about?**
+1. **Can Cilium detect the errors you care about?**
    - Policy violations (Cilium only)
    - HTTP errors (both, if L7 enabled)
    - DNS failures (both)
@@ -143,6 +310,28 @@ Based on similar tests, you should see:
 
 ## Troubleshooting
 
+### Cluster won't start
+```bash
+# Check if old containers are stuck
+sudo podman ps -a | grep cilium-poc
+
+# Clean up and recreate
+sudo kind delete cluster --name cilium-poc
+./setup/02-create-cluster-rootful.sh
+```
+
+### Pods stuck in "Pending"
+```bash
+# Check node status
+kubectl get nodes
+
+# Check Cilium
+cilium status
+
+# If Cilium not ready, reinstall
+./deploy/cilium-install.sh
+```
+
 ### Error generator not creating errors
 ```bash
 # Check if backend-errors service is running
@@ -150,6 +339,9 @@ kubectl get svc -n demo backend-errors
 
 # Check error generator logs
 kubectl logs -n demo deployment/error-generator
+
+# If backend-errors doesn't exist
+kubectl apply -f testing/backend-error-service.yaml
 ```
 
 ### No policy violations showing up
@@ -162,6 +354,16 @@ cilium status
 
 # Try manual test
 kubectl exec -n demo deployment/policy-violator -- curl -v http://restricted-service:80/
+```
+
+### Hubble connection refused
+```bash
+# Restart port-forward
+pkill -f "hubble.*port-forward"
+cilium hubble port-forward &
+
+# Test
+hubble observe --last 10
 ```
 
 ### Hubble not showing L7 data
@@ -202,7 +404,7 @@ kubectl delete -f testing/policy-violator.yaml
 1. Run for 30-60 minutes minimum
 2. Collect data: `./collection/export-all.sh`
 3. Analyze: `./analysis/analyze-error-scenarios.sh`
-4. Review the report to determine which tool better meets your needs
+4. Review the report to determine which tool better meets our needs
 5. Make decision: Hubble primary + Packetbeat on-demand, or all Packetbeat?
 
 ## Report Output
@@ -216,3 +418,26 @@ The analysis script produces a detailed report showing:
 - Recommendations by error type
 
 The report will clearly show which tool is better for each scenario in your specific environment.
+
+## Pro Tips
+
+1. **Save terminal commands for next time:**
+```bash
+cat > ~/start-error-tests.sh <<'EOF'
+#!/bin/bash
+cd ~/packetbeat_alternatives
+kubectl get nodes || ./setup/02-create-cluster-rootful.sh
+cilium hubble port-forward &
+./testing/deploy-error-scenarios.sh
+kubectl logs -f -n demo deployment/error-generator
+EOF
+chmod +x ~/start-error-tests.sh
+```
+
+2. **Check everything before walking away:**
+```bash
+kubectl get pods -n demo | grep -E "error-generator|policy-violator|restricted"
+# All should show "Running"
+```
+
+3. **Watch live in browser:** Access Hubble UI at http://localhost:12000 (after running `cilium hubble ui`)

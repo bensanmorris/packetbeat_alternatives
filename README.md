@@ -4,6 +4,8 @@ Packetbeat being designed around Elastic ingest is quite verbose (approx 2-5k of
 
 [Results on local RHEL9 demo machine](./reports/comparison-report-20260203-114043.txt)
 
+![Cilium capture screenshot](screenshot.png)
+
 ## Contents
 
 ```

@@ -2,7 +2,9 @@
 
 Packetbeat being designed around Elastic ingest is quite verbose (approx 2-5k of metadata per event) vs Cilium's 200-500 bytes. This repo contains everything needed to run a side-by-side comparison of Cilium/Hubble and Packetbeat on RHEL9 using Podman.
 
-[Results on local RHEL9 demo machine](./reports/comparison-report-20260203-114043.txt)
+[A summary of specific error scenarios tested with cilium output for granularity inspection (the steps for which are provided below)](testing/POC-Live-Preview.md)
+
+[Cilium vs Packetbeat results from local RHEL9 demo machine](./reports/comparison-report-20260203-114043.txt)
 
 ![Cilium capture screenshot](screenshot.png)
 

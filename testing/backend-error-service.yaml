@@ -1,4 +1,53 @@
 ---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: error-responder-config
+  namespace: demo
+data:
+  default.conf: |
+    server {
+        listen 8080;
+        
+        # Return specific status codes based on path
+        location = /status/400 {
+            return 400 "Bad Request\n";
+        }
+        location = /status/401 {
+            return 401 "Unauthorized\n";
+        }
+        location = /status/403 {
+            return 403 "Forbidden\n";
+        }
+        location = /status/404 {
+            return 404 "Not Found\n";
+        }
+        location = /status/500 {
+            return 500 "Internal Server Error\n";
+        }
+        location = /status/502 {
+            return 502 "Bad Gateway\n";
+        }
+        location = /status/503 {
+            return 503 "Service Unavailable\n";
+        }
+        location = /status/504 {
+            return 504 "Gateway Timeout\n";
+        }
+        
+        # Simulate delays with nginx sleep (using limit_req_zone workaround)
+        # Note: Real delays would need lua or external module
+        location ~ ^/delay/([0-9]+)$ {
+            return 200 "Delayed response (delay not actually implemented in basic nginx)\n";
+        }
+        
+        # Default response
+        location / {
+            return 200 "Backend Error Responder\nAvailable endpoints:\n  /status/400 - /status/504 (HTTP errors)\n  /delay/N (returns immediately, no actual delay in this version)\n";
+        }
+    }
+
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -15,54 +64,24 @@ spec:
         app: backend-error-capable
     spec:
       containers:
-      - name: backend
-        image: hashicorp/http-echo:latest
-        args:
-          - "-text=Backend Service"
-          - "-listen=:80"
-        ports:
-        - containerPort: 80
-        # Add nginx with lua to handle status code requests
       - name: error-responder
         image: nginx:alpine
         ports:
         - containerPort: 8080
         volumeMounts:
-        - name: nginx-config
+        - name: config
           mountPath: /etc/nginx/conf.d
+        resources:
+          requests:
+            cpu: 10m
+            memory: 32Mi
+          limits:
+            cpu: 100m
+            memory: 64Mi
       volumes:
-      - name: nginx-config
+      - name: config
         configMap:
           name: error-responder-config
-
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: error-responder-config
-  namespace: demo
-data:
-  default.conf: |
-    server {
-        listen 8080;
-        
-        # Return specific status codes based on path
-        location ~ ^/status/([0-9]+)$ {
-            return $1 "Status code: $1\n";
-        }
-        
-        # Simulate delays
-        location ~ ^/delay/([0-9]+)$ {
-            set $delay $1;
-            echo_sleep $delay;
-            echo "Delayed by $delay seconds";
-        }
-        
-        # Default response
-        location / {
-            return 200 "Backend Error Responder\n";
-        }
-    }
 
 ---
 apiVersion: v1
@@ -70,6 +89,8 @@ kind: Service
 metadata:
   name: backend-errors
   namespace: demo
+  labels:
+    app: backend-error-capable
 spec:
   selector:
     app: backend-error-capable

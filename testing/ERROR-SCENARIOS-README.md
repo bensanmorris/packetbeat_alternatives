@@ -105,7 +105,7 @@ kubectl wait --for=condition=ready pod --all -n monitoring --timeout=120s
 
 ```bash
 
-# Deploy all error scenarios
+# Deploy all error scenarios (includes L7 enablement)
 ./testing/deploy-error-scenarios.sh
 ```
 
@@ -117,7 +117,17 @@ Step 1: Deploying enhanced backend with error responses...
 deployment.apps/backend-error-capable created
 ...
 
+Step 6: Enabling L7 HTTP visibility for Cilium...
+  (This allows Cilium to capture HTTP methods, paths, and status codes)
+
+Step 7: Restarting deployments to activate L7 proxy...
+
 === Error Scenarios Deployed ===
+```
+
+**Verify L7 is working:**
+```bash
+./testing/verify-l7-visibility.sh
 ```
 
 ### Step 4: Verify Deployment
@@ -368,11 +378,23 @@ hubble observe --last 10
 
 ### Hubble not showing L7 data
 ```bash
-# Enable L7 visibility for HTTP
-kubectl annotate pod -n demo --all policy.cilium.io/proxy-visibility="<Ingress/80/TCP/HTTP>"
+# Check if L7 visibility is enabled
+./testing/verify-l7-visibility.sh
+
+# If not enabled, run:
+./testing/enable-l7-visibility.sh
+
+# Or manually enable L7 visibility for HTTP
+kubectl annotate pod -n demo --all policy.cilium.io/proxy-visibility="<Ingress/80/TCP/HTTP>,<Egress/80/TCP/HTTP>" --overwrite
 
 # Restart pods to pick up annotation
 kubectl rollout restart deployment -n demo
+
+# Wait for pods to be ready
+kubectl wait --for=condition=ready pod --all -n demo --timeout=120s
+
+# Verify it's working
+hubble observe --namespace demo --protocol http --last 10
 ```
 
 ## Advanced: Custom Error Scenarios

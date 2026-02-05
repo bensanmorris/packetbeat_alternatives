@@ -33,6 +33,21 @@ kubectl wait --for=condition=ready pod -l app=policy-violator -n demo --timeout=
 kubectl wait --for=condition=ready pod -l app=restricted-service -n demo --timeout=60s || echo "  ⚠️  restricted-service not ready yet"
 
 echo ""
+echo "Step 6: Enabling L7 HTTP visibility for Cilium..."
+echo "  (This allows Cilium to capture HTTP methods, paths, and status codes)"
+kubectl annotate pod -n demo --all \
+    policy.cilium.io/proxy-visibility="<Ingress/80/TCP/HTTP>,<Egress/80/TCP/HTTP>" \
+    --overwrite
+
+echo ""
+echo "Step 7: Restarting deployments to activate L7 proxy..."
+kubectl rollout restart deployment -n demo
+
+echo ""
+echo "Step 8: Waiting for deployments to be ready with L7 enabled..."
+kubectl wait --for=condition=ready pod --all -n demo --timeout=120s
+
+echo ""
 echo "=== Error Scenarios Deployed ==="
 echo ""
 echo "Active error generators:"

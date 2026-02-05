@@ -1,0 +1,82 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: error-scenarios
+  namespace: demo
+data:
+  scenarios.sh: |
+    #!/bin/bash
+    # Error Generator Script - Produces various network errors for testing
+    
+    echo "=== Starting Error Generator ==="
+    echo "This will generate various network errors every 30 seconds"
+    echo ""
+    
+    while true; do
+      echo "$(date): Running error scenarios..."
+      
+      # Scenario 1: HTTP Errors (4xx, 5xx)
+      echo "  [HTTP] Testing error responses..."
+      curl -s -o /dev/null -w "  - GET /status/400: %{http_code}\n" http://backend:80/status/400 || echo "  - Request failed"
+      curl -s -o /dev/null -w "  - GET /status/401: %{http_code}\n" http://backend:80/status/401 || echo "  - Request failed"
+      curl -s -o /dev/null -w "  - GET /status/403: %{http_code}\n" http://backend:80/status/403 || echo "  - Request failed"
+      curl -s -o /dev/null -w "  - GET /status/404: %{http_code}\n" http://backend:80/status/404 || echo "  - Request failed"
+      curl -s -o /dev/null -w "  - GET /status/500: %{http_code}\n" http://backend:80/status/500 || echo "  - Request failed"
+      curl -s -o /dev/null -w "  - GET /status/502: %{http_code}\n" http://backend:80/status/502 || echo "  - Request failed"
+      curl -s -o /dev/null -w "  - GET /status/503: %{http_code}\n" http://backend:80/status/503 || echo "  - Request failed"
+      
+      # Scenario 2: Connection Refused (wrong port)
+      echo "  [TCP] Testing connection refused..."
+      curl -s --connect-timeout 2 http://backend:9999/ 2>&1 | grep -o "Connection refused" || echo "  - No connection refused error"
+      
+      # Scenario 3: DNS Failures
+      echo "  [DNS] Testing DNS failures..."
+      curl -s --connect-timeout 2 http://does-not-exist.demo.svc.cluster.local/ 2>&1 | grep -o "not resolve" || echo "  - DNS worked or different error"
+      curl -s --connect-timeout 2 http://invalid-service:80/ 2>&1 | grep -o "not resolve" || echo "  - DNS worked or different error"
+      
+      # Scenario 4: Timeout (slow service)
+      echo "  [TIMEOUT] Testing slow responses..."
+      curl -s --max-time 3 http://backend:80/delay/5 2>&1 | grep -o "timed out" || echo "  - Completed or different error"
+      
+      # Scenario 5: Connection to non-existent service
+      echo "  [TCP] Testing non-existent service..."
+      curl -s --connect-timeout 2 http://10.255.255.255:80/ 2>&1 | grep -o "timed out\|refused" || echo "  - Different error"
+      
+      # Scenario 6: Large request (potential issues)
+      echo "  [HTTP] Testing large POST..."
+      dd if=/dev/zero bs=1M count=1 2>/dev/null | curl -s -o /dev/null -w "  - POST large payload: %{http_code}\n" -X POST --data-binary @- http://backend:80/ || echo "  - Request failed"
+      
+      echo ""
+      echo "Sleeping 30 seconds before next cycle..."
+      sleep 30
+    done
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: error-generator
+  namespace: demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: error-generator
+  template:
+    metadata:
+      labels:
+        app: error-generator
+    spec:
+      containers:
+      - name: generator
+        image: curlimages/curl:latest
+        command: ["/bin/sh", "/scripts/scenarios.sh"]
+        volumeMounts:
+        - name: scenarios
+          mountPath: /scripts
+      volumes:
+      - name: scenarios
+        configMap:
+          name: error-scenarios
+          defaultMode: 0755

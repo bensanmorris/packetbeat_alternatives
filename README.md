@@ -128,6 +128,10 @@ cilium status
 kubectl get pods -n monitoring
 ```
 
+## Testing network and protocol error scenarios
+
+[An additional set of test scripts and config are provided here](/testing/ERROR-SCENARIOS-README.md) for testing specific error scenarios (useful for understanding the level of granularity captured by Cilium).
+
 ## Troubleshooting
 
 ### If Kind fails to start

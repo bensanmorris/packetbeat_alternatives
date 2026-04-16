@@ -1,0 +1,4 @@
+NAME                       STATUS   ROLES           AGE     VERSION   INTERNAL-IP   EXTERNAL-IP   OS-IMAGE                         KERNEL-VERSION                 CONTAINER-RUNTIME
+cilium-poc-control-plane   Ready    control-plane   4h24m   v1.27.3   10.89.0.2     <none>        Debian GNU/Linux 11 (bullseye)   5.14.0-611.13.1.el9_7.x86_64   containerd://1.7.1
+cilium-poc-worker          Ready    <none>          4h24m   v1.27.3   10.89.0.4     <none>        Debian GNU/Linux 11 (bullseye)   5.14.0-611.13.1.el9_7.x86_64   containerd://1.7.1
+cilium-poc-worker2         Ready    <none>          4h24m   v1.27.3   10.89.0.3     <none>        Debian GNU/Linux 11 (bullseye)   5.14.0-611.13.1.el9_7.x86_64   containerd://1.7.1

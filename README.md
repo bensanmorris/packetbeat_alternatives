@@ -6,6 +6,8 @@ Packetbeat being designed around Elastic ingest is quite verbose (approx 2-5k of
 
 [Cilium vs Packetbeat results from local RHEL9 demo machine](./reports/comparison-report-20260203-114043.txt)
 
+[Cilium vs Packetbeat sample test data (first 5000 captured events) can be found in the data-sample folder along with a companion README linked to here](./data-sample/README.md)
+
 ![Cilium capture screenshot](screenshot.png)
 
 ## Contents

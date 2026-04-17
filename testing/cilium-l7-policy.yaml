@@ -8,7 +8,7 @@ spec:
   # Apply to all pods in demo namespace
   endpointSelector: {}
   
-  # Allow ingress HTTP traffic with L7 inspection
+  # Allow all ingress with HTTP L7 inspection on port 80
   ingress:
   - toPorts:
     - ports:
@@ -16,9 +16,10 @@ spec:
         protocol: TCP
       rules:
         http:
-        - method: ".*"  # Allow all HTTP methods (GET, POST, etc.)
+        - {}  # Allow all HTTP requests (just inspect them)
+  - {}  # Allow all other ingress traffic
   
-  # Allow egress HTTP traffic with L7 inspection  
+  # Allow all egress with HTTP L7 inspection on port 80
   egress:
   - toPorts:
     - ports:
@@ -26,9 +27,5 @@ spec:
         protocol: TCP
       rules:
         http:
-        - method: ".*"  # Allow all HTTP methods
-  
-  # Allow all other traffic (DNS, other ports)
-  - toEntities:
-    - cluster
-    - world
+        - {}  # Allow all HTTP requests (just inspect them)
+  - {}  # Allow all other egress traffic

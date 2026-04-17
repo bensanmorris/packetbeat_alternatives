@@ -109,25 +109,30 @@ Hubble Relay:       OK
 chmod +x testing/*.sh
 
 # Deploy error generators and test applications
-# This now automatically:
-# - Deploys error scenarios
-# - Applies Cilium L7 HTTP policy (cilium-l7-policy.yaml)
-# - Enables L7 annotations on all deployments
 ./testing/deploy-error-scenarios.sh
 
-# Wait 2-3 minutes for L7 proxy to initialize
+# Note: L7 HTTP visibility is optional and can cause connectivity issues
+# The test works perfectly fine with L3/L4 flow data (IPs, ports, protocols)
+# which is sufficient for the byte counter comparison
 
-# Verify L7 visibility is working
-./testing/verify-l7-visibility.sh
+# Verify traffic is flowing
+kubectl logs -n demo deployment/error-generator --tail=30
 ```
 
-**Expected from verify script:**
+**Expected from error generator:**
 ```
-✓ L7 HTTP data found in Hubble
-✓ Seeing HTTP methods and status codes
+✓ GET /status/400: 400
+✓ GET /status/401: 401
+✓ GET /status/404: 404
+✓ GET /status/500: 500
 ```
 
-**Note:** L7 HTTP inspection requires both a CiliumNetworkPolicy (applied automatically) and pod annotations (also applied automatically) to work.
+**What you'll capture (L3/L4 mode):**
+- Source/destination IPs and ports
+- Protocol information (TCP/UDP)
+- Network policy verdicts (FORWARDED/DROPPED)
+- Pod identity and labels
+- **Byte/packet counters** (from Cilium Prometheus metrics)
 
 ### 4. Generate Traffic (Let Run 30-60 Minutes)
 ```bash

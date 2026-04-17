@@ -54,36 +54,19 @@ echo "Check Cilium network policies:"
 echo "  kubectl get networkpolicies -n demo"
 echo "  kubectl get ciliumnetworkpolicies -n demo"
 echo ""
-echo "=== Enabling L7 HTTP Visibility ==="
-echo ""
-
-# Apply Cilium L7 policy to enable HTTP inspection
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-if [ -f "$SCRIPT_DIR/cilium-l7-policy.yaml" ]; then
-    echo "Step 1: Applying Cilium L7 HTTP policy..."
-    kubectl apply -f "$SCRIPT_DIR/cilium-l7-policy.yaml"
-    echo "✓ L7 policy applied"
-else
-    echo "⚠️  L7 policy file not found: $SCRIPT_DIR/cilium-l7-policy.yaml"
-fi
-
-echo ""
-echo "Step 2: Enabling L7 annotations on deployments..."
-
-# Enable L7 visibility automatically
-if [ -f "$SCRIPT_DIR/enable-l7-visibility.sh" ]; then
-    "$SCRIPT_DIR/enable-l7-visibility.sh"
-else
-    echo "⚠️  L7 visibility script not found"
-    echo "Run manually: ./testing/enable-l7-visibility.sh"
-fi
-
-echo ""
 echo "=== Deployment Complete ==="
 echo ""
+echo "Traffic is being generated every 30 seconds."
+echo ""
+echo "Note: L7 HTTP visibility is disabled by default as it can cause"
+echo "connectivity issues. The test works fine with L3/L4 flow data."
+echo ""
+echo "To enable L7 (optional, advanced):"
+echo "  kubectl apply -f testing/cilium-l7-policy.yaml"
+echo "  ./testing/enable-l7-visibility.sh"
+echo ""
 echo "Next steps:"
-echo "  1. Wait 2-3 minutes for L7 proxy to initialize"
-echo "  2. Verify L7: ./testing/verify-l7-visibility.sh"
-echo "  3. Monitor traffic: kubectl logs -f -n demo deployment/error-generator"
-echo "  4. Let run 30-60 minutes to accumulate ~5000 flows"
-echo "  5. Collect data: ./collection/export-all.sh"
+echo "  1. Verify traffic: kubectl logs -f -n demo deployment/error-generator"
+echo "  2. Let run 30-60 minutes to accumulate ~5000 flows"
+echo "  3. Collect data: ./collection/export-all.sh"
+echo "  4. Analyze: ./testing/analyze-error-scenarios.sh"

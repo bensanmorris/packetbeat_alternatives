@@ -33,6 +33,8 @@ cilium-packetbeat-poc/
 │   ├── deploy-error-scenarios.sh    # Deploy all error test scenarios
 │   ├── enable-l7-visibility.sh      # Enable L7 HTTP visibility for Cilium
 │   ├── verify-l7-visibility.sh      # Verify L7 is working
+│   ├── cilium-l7-policy.yaml        # Cilium L7 HTTP inspection policy
+│   ├── cleanup-demo.sh              # Clean up demo namespace
 │   ├── analyze-error-scenarios.sh   # Analyze error scenario results
 │   ├── error-generator.yaml         # Continuous error generation
 │   ├── backend-error-service.yaml   # Backend that returns specific status codes
@@ -107,10 +109,13 @@ Hubble Relay:       OK
 chmod +x testing/*.sh
 
 # Deploy error generators and test applications
+# This now automatically:
+# - Deploys error scenarios
+# - Applies Cilium L7 HTTP policy (cilium-l7-policy.yaml)
+# - Enables L7 annotations on all deployments
 ./testing/deploy-error-scenarios.sh
 
-# Enable L7 HTTP visibility on all demo pods
-./testing/enable-l7-visibility.sh
+# Wait 2-3 minutes for L7 proxy to initialize
 
 # Verify L7 visibility is working
 ./testing/verify-l7-visibility.sh
@@ -121,6 +126,8 @@ chmod +x testing/*.sh
 ✓ L7 HTTP data found in Hubble
 ✓ Seeing HTTP methods and status codes
 ```
+
+**Note:** L7 HTTP inspection requires both a CiliumNetworkPolicy (applied automatically) and pod annotations (also applied automatically) to work.
 
 ### 4. Generate Traffic (Let Run 30-60 Minutes)
 ```bash

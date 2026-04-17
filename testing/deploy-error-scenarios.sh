@@ -52,13 +52,25 @@ echo "  hubble observe --namespace demo --from-pod error-generator"
 echo ""
 echo "Check Cilium network policies:"
 echo "  kubectl get networkpolicies -n demo"
-echo "  cilium endpoint list"
+echo "  kubectl get ciliumnetworkpolicies -n demo"
 echo ""
 echo "=== Enabling L7 HTTP Visibility ==="
 echo ""
 
-# Enable L7 visibility automatically
+# Apply Cilium L7 policy to enable HTTP inspection
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -f "$SCRIPT_DIR/cilium-l7-policy.yaml" ]; then
+    echo "Step 1: Applying Cilium L7 HTTP policy..."
+    kubectl apply -f "$SCRIPT_DIR/cilium-l7-policy.yaml"
+    echo "✓ L7 policy applied"
+else
+    echo "⚠️  L7 policy file not found: $SCRIPT_DIR/cilium-l7-policy.yaml"
+fi
+
+echo ""
+echo "Step 2: Enabling L7 annotations on deployments..."
+
+# Enable L7 visibility automatically
 if [ -f "$SCRIPT_DIR/enable-l7-visibility.sh" ]; then
     "$SCRIPT_DIR/enable-l7-visibility.sh"
 else
@@ -70,7 +82,8 @@ echo ""
 echo "=== Deployment Complete ==="
 echo ""
 echo "Next steps:"
-echo "  1. Verify L7: ./testing/verify-l7-visibility.sh"
-echo "  2. Monitor traffic: kubectl logs -f -n demo deployment/error-generator"
-echo "  3. Let run 30-60 minutes to accumulate ~5000 flows"
-echo "  4. Collect data: ./collection/export-all.sh"
+echo "  1. Wait 2-3 minutes for L7 proxy to initialize"
+echo "  2. Verify L7: ./testing/verify-l7-visibility.sh"
+echo "  3. Monitor traffic: kubectl logs -f -n demo deployment/error-generator"
+echo "  4. Let run 30-60 minutes to accumulate ~5000 flows"
+echo "  5. Collect data: ./collection/export-all.sh"

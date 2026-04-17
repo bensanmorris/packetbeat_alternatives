@@ -50,77 +50,22 @@ cilium status > "$DATA_DIR/cilium-status.txt" 2>&1 || true
 echo ""
 echo "Step 4: Extracting Cilium byte/packet counters..."
 
-if [ -f "$DATA_DIR/hubble-metrics-raw.txt" ]; then
-    echo "  Parsing byte/packet metrics from Prometheus data..."
-    
-    # Extract and parse byte/packet counters into JSON
-    python3 - <<'PYTHON_SCRIPT' > "$DATA_DIR/cilium-byte-metrics.json" 2>/dev/null || {
-import re
-import json
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-metrics = {}
-
-try:
-    with open('data/hubble/hubble-metrics-raw.txt', 'r') as f:
-        for line in f:
-            # Skip comments and empty lines
-            if line.startswith('#') or not line.strip():
-                continue
-            
-            # Parse endpoint byte metrics
-            # Format: cilium_endpoint_egress_bytes_total{endpoint_id="123",namespace="demo",pod="frontend-abc"} 12345
-            
-            # Egress bytes
-            match = re.match(r'cilium_endpoint_egress_bytes_total\{[^}]*namespace="([^"]+)"[^}]*pod="([^"]+)"[^}]*\}\s+(\d+)', line)
-            if match:
-                namespace, pod, bytes_val = match.groups()
-                key = f"{namespace}/{pod}"
-                if key not in metrics:
-                    metrics[key] = {}
-                metrics[key]['egress_bytes'] = int(bytes_val)
-            
-            # Ingress bytes
-            match = re.match(r'cilium_endpoint_ingress_bytes_total\{[^}]*namespace="([^"]+)"[^}]*pod="([^"]+)"[^}]*\}\s+(\d+)', line)
-            if match:
-                namespace, pod, bytes_val = match.groups()
-                key = f"{namespace}/{pod}"
-                if key not in metrics:
-                    metrics[key] = {}
-                metrics[key]['ingress_bytes'] = int(bytes_val)
-            
-            # Egress packets
-            match = re.match(r'cilium_endpoint_egress_packets_total\{[^}]*namespace="([^"]+)"[^}]*pod="([^"]+)"[^}]*\}\s+(\d+)', line)
-            if match:
-                namespace, pod, packets_val = match.groups()
-                key = f"{namespace}/{pod}"
-                if key not in metrics:
-                    metrics[key] = {}
-                metrics[key]['egress_packets'] = int(packets_val)
-            
-            # Ingress packets
-            match = re.match(r'cilium_endpoint_ingress_packets_total\{[^}]*namespace="([^"]+)"[^}]*pod="([^"]+)"[^}]*\}\s+(\d+)', line)
-            if match:
-                namespace, pod, packets_val = match.groups()
-                key = f"{namespace}/{pod}"
-                if key not in metrics:
-                    metrics[key] = {}
-                metrics[key]['ingress_packets'] = int(packets_val)
+if [ -f "$DATA_DIR/hubble-metrics-raw.txt" ] && [ -s "$DATA_DIR/hubble-metrics-raw.txt" ]; then
+    echo "  Using Python extraction script..."
     
-    # Calculate totals for each pod
-    for key in metrics:
-        metrics[key]['total_bytes'] = metrics[key].get('egress_bytes', 0) + metrics[key].get('ingress_bytes', 0)
-        metrics[key]['total_packets'] = metrics[key].get('egress_packets', 0) + metrics[key].get('ingress_packets', 0)
-    
-    # Output JSON
-    print(json.dumps(metrics, indent=2, sort_keys=True))
-    
-except Exception as e:
-    # Fallback to empty JSON if parsing fails
-    print("{}")
-    import sys
-    print(f"Warning: Failed to parse metrics: {e}", file=sys.stderr)
-PYTHON_SCRIPT
-    }
+    if [ -f "$SCRIPT_DIR/extract-cilium-byte-metrics.py" ]; then
+        python3 "$SCRIPT_DIR/extract-cilium-byte-metrics.py" \
+            "$DATA_DIR/hubble-metrics-raw.txt" \
+            "$DATA_DIR/cilium-byte-metrics.json" 2>/dev/null || {
+            echo "  ⚠️  Extraction failed, creating empty file"
+            echo "{}" > "$DATA_DIR/cilium-byte-metrics.json"
+        }
+    else
+        echo "  ⚠️  extract-cilium-byte-metrics.py not found"
+        echo "{}" > "$DATA_DIR/cilium-byte-metrics.json"
+    fi
     
     # Check if metrics were extracted
     if [ -s "$DATA_DIR/cilium-byte-metrics.json" ] && grep -q "egress_bytes" "$DATA_DIR/cilium-byte-metrics.json" 2>/dev/null; then
@@ -129,7 +74,6 @@ PYTHON_SCRIPT
         echo "  ✓ Byte/packet metrics extracted: $POD_COUNT pods, $METRICS_SIZE"
     else
         echo "  ⚠️  No byte metrics found (no endpoints with traffic yet?)"
-        echo "{}" > "$DATA_DIR/cilium-byte-metrics.json"
     fi
 else
     echo "  ⚠️  Skipping byte metrics (Prometheus data not available)"
@@ -137,11 +81,9 @@ else
 fi
 
 echo ""
-echo "Step 5: Generating statistics and summaries..."
-
-# Generate flow statistics
+echo "Step 5: Generating flow statistics..."
 if [ -f "$DATA_DIR/hubble-flows-all.json" ]; then
-    cat > "$DATA_DIR/hubble-stats.txt" <<EOF
+    cat > "$DATA_DIR/hubble-stats.txt" <<STATSEOF
 Hubble Flow Statistics
 ======================
 
@@ -149,62 +91,15 @@ Total flows: $(wc -l < "$DATA_DIR/hubble-flows-all.json")
 HTTP flows: $(wc -l < "$DATA_DIR/hubble-flows-http.json" 2>/dev/null || echo "0")
 DNS flows: $(wc -l < "$DATA_DIR/hubble-flows-dns.json" 2>/dev/null || echo "0")
 Dropped flows: $(wc -l < "$DATA_DIR/hubble-flows-dropped.json" 2>/dev/null || echo "0")
-
-Verdicts:
-$(cat "$DATA_DIR/hubble-flows-all.json" | jq -r '.flow.verdict // "UNKNOWN"' 2>/dev/null | sort | uniq -c | sort -rn || echo "(jq not available)")
-
-Top source labels:
-$(cat "$DATA_DIR/hubble-flows-all.json" | jq -r '.flow.source.labels[]? // empty' 2>/dev/null | sort | uniq -c | sort -rn | head -5 || echo "(jq not available)")
-EOF
-    echo "  ✓ Flow statistics generated"
-fi
-
-# Generate byte metrics summary if python3/jq available
-if [ -f "$DATA_DIR/cilium-byte-metrics.json" ] && command -v python3 &> /dev/null; then
-    python3 - <<'PYTHON_SUMMARY' > "$DATA_DIR/byte-metrics-summary.txt" 2>/dev/null || echo "Byte metrics summary: see cilium-byte-metrics.json" > "$DATA_DIR/byte-metrics-summary.txt"
-import json
-
-with open('data/hubble/cilium-byte-metrics.json', 'r') as f:
-    metrics = json.load(f)
-
-demo_metrics = {k: v for k, v in metrics.items() if k.startswith('demo/')}
-
-print("Cilium Byte/Packet Metrics Summary")
-print("=" * 50)
-print()
-
-if demo_metrics:
-    total_egress = sum(m.get('egress_bytes', 0) for m in demo_metrics.values())
-    total_ingress = sum(m.get('ingress_bytes', 0) for m in demo_metrics.values())
-    total_bytes = sum(m.get('total_bytes', 0) for m in demo_metrics.values())
-    total_packets = sum(m.get('total_packets', 0) for m in demo_metrics.values())
-    
-    print(f"Demo namespace totals:")
-    print(f"  Egress bytes:  {total_egress:,} ({total_egress / 1048576:.1f} MB)")
-    print(f"  Ingress bytes: {total_ingress:,} ({total_ingress / 1048576:.1f} MB)")
-    print(f"  Total bytes:   {total_bytes:,} ({total_bytes / 1048576:.1f} MB)")
-    print(f"  Total packets: {total_packets:,}")
-    print()
-    print("Top 5 pods by total bytes:")
-    
-    sorted_pods = sorted(demo_metrics.items(), key=lambda x: x[1].get('total_bytes', 0), reverse=True)[:5]
-    for pod, stats in sorted_pods:
-        pod_name = pod.split('/')[-1]
-        mb = stats.get('total_bytes', 0) / 1048576
-        print(f"  {pod_name[:40]:40s} {mb:8.2f} MB")
-else:
-    print("No metrics found for demo namespace")
-PYTHON_SUMMARY
-    
-    echo "  ✓ Byte metrics summary generated"
+STATSEOF
+    echo "  ✓ Statistics generated"
 fi
 
 echo ""
 echo "=== Hubble Data Collection Complete ==="
 echo ""
 echo "Data saved to: $DATA_DIR/"
-echo ""
-ls -lh "$DATA_DIR/" | grep -v "^total" | awk '{printf "  %-40s %8s\n", $9, $5}'
+ls -lh "$DATA_DIR/" | grep -v "^total"
 
 echo ""
 echo "Summary:"

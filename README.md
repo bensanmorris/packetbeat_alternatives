@@ -1,5 +1,19 @@
 # Cilium vs Packetbeat POC - RHEL9 + Podman
 
+## TL;DR - Key Findings
+
+**Surprising Result:** In flow-mode, Packetbeat is actually **30% smaller** than Hubble, not larger! The original 230:1 ratio was based on Packetbeat's transaction mode (capturing full HTTP payloads).
+
+**The Real Difference:** It's not about storage—it's about **context vs granularity**:
+- **Hubble:** Kubernetes-native (pod names, namespaces, policy verdicts) - Perfect for cloud-native troubleshooting
+- **Packetbeat:** Network-native (per-flow byte/packet counters, duration) - Perfect for deep network analysis
+
+**Recommended Approach:** Run Hubble always-on for Kubernetes context + deploy Packetbeat on-demand (24-48 hours) when you need per-flow byte granularity.
+
+📊 **[Read the full analysis report](data-sample/README.md)** - Complete comparison of 5,000 events from both tools, including storage efficiency, data richness comparison, coverage analysis, and recommended deployment strategy.
+
+---
+
 Packetbeat being designed around Elastic ingest is quite verbose (approx 2-5k of metadata per event) vs Cilium's 200-500 bytes. This repo contains everything needed to run a side-by-side comparison of Cilium/Hubble and Packetbeat on RHEL9 using Podman.
 
 [A summary of specific error scenarios tested with cilium output for granularity inspection (the steps for which are provided below)](testing/POC-Live-Preview.md)

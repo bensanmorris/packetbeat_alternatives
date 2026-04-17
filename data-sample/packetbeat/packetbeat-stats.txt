@@ -1,0 +1,49 @@
+Packetbeat Statistics
+=====================
+
+Total events: 280848
+
+File size: 250M
+
+Event types (sample):
+    100 flow
+
+Protocols (sample):
+    100 unknown
+
+Top source IPs (sample):
+     62 10.244.1.154
+     22 10.89.0.6
+      5 10.89.0.7
+      5 10.244.1.46
+      4 10.89.0.5
+      1 10.244.1.116
+      1 10.244.0.84
+
+Raw files location:
+-rw-r--r--. 1 benm benm 9.8M Apr 17 13:39 data/packetbeat/packetbeat-6dqdw/captures/packetbeat-20260417.ndjson
+-rw-r--r--. 1 benm benm 9.8M Apr 17 13:39 data/packetbeat/packetbeat-6dqdw/captures/packetbeat-20260417-1.ndjson
+-rw-r--r--. 1 benm benm 9.8M Apr 17 13:39 data/packetbeat/packetbeat-6dqdw/captures/packetbeat-20260417-2.ndjson
+-rw-r--r--. 1 benm benm 9.8M Apr 17 13:39 data/packetbeat/packetbeat-6dqdw/captures/packetbeat-20260417-3.ndjson
+-rw-r--r--. 1 benm benm 9.8M Apr 17 13:39 data/packetbeat/packetbeat-6dqdw/captures/packetbeat-20260417-4.ndjson
+-rw-r--r--. 1 benm benm 9.8M Apr 17 13:39 data/packetbeat/packetbeat-6dqdw/captures/packetbeat-20260417-5.ndjson
+-rw-r--r--. 1 benm benm 9.8M Apr 17 13:39 data/packetbeat/packetbeat-6dqdw/captures/packetbeat-20260417-6.ndjson
+-rw-r--r--. 1 benm benm 9.8M Apr 17 13:39 data/packetbeat/packetbeat-6dqdw/captures/packetbeat-20260417-7.ndjson
+-rw-r--r--. 1 benm benm 9.8M Apr 17 13:39 data/packetbeat/packetbeat-6dqdw/captures/packetbeat-20260417-8.ndjson
+-rw-r--r--. 1 benm benm 9.8M Apr 17 13:39 data/packetbeat/packetbeat-6dqdw/captures/packetbeat-20260417-9.ndjson
+-rw-r--r--. 1 benm benm 9.8M Apr 17 13:39 data/packetbeat/packetbeat-6dqdw/captures/packetbeat-20260417-10.ndjson
+-rw-r--r--. 1 benm benm 9.8M Apr 17 13:39 data/packetbeat/packetbeat-6dqdw/captures/packetbeat-20260417-11.ndjson
+-rw-r--r--. 1 benm benm 9.8M Apr 17 13:39 data/packetbeat/packetbeat-6dqdw/captures/packetbeat-20260417-12.ndjson
+-rw-r--r--. 1 benm benm 9.8M Apr 17 13:39 data/packetbeat/packetbeat-6dqdw/captures/packetbeat-20260417-13.ndjson
+-rw-r--r--. 1 benm benm 4.9M Apr 17 13:39 data/packetbeat/packetbeat-6dqdw/captures/packetbeat-20260417-14.ndjson
+-rw-r--r--. 1 benm benm 9.8M Apr 17 13:39 data/packetbeat/packetbeat-gffph/captures/packetbeat-20260417.ndjson
+-rw-r--r--. 1 benm benm 9.8M Apr 17 13:39 data/packetbeat/packetbeat-gffph/captures/packetbeat-20260417-1.ndjson
+-rw-r--r--. 1 benm benm 9.8M Apr 17 13:39 data/packetbeat/packetbeat-gffph/captures/packetbeat-20260417-2.ndjson
+-rw-r--r--. 1 benm benm 9.8M Apr 17 13:39 data/packetbeat/packetbeat-gffph/captures/packetbeat-20260417-3.ndjson
+-rw-r--r--. 1 benm benm 9.8M Apr 17 13:39 data/packetbeat/packetbeat-gffph/captures/packetbeat-20260417-4.ndjson
+-rw-r--r--. 1 benm benm 9.8M Apr 17 13:39 data/packetbeat/packetbeat-gffph/captures/packetbeat-20260417-5.ndjson
+-rw-r--r--. 1 benm benm 9.8M Apr 17 13:39 data/packetbeat/packetbeat-gffph/captures/packetbeat-20260417-6.ndjson
+-rw-r--r--. 1 benm benm 9.8M Apr 17 13:39 data/packetbeat/packetbeat-gffph/captures/packetbeat-20260417-7.ndjson
+-rw-r--r--. 1 benm benm 9.8M Apr 17 13:39 data/packetbeat/packetbeat-gffph/captures/packetbeat-20260417-8.ndjson
+-rw-r--r--. 1 benm benm 9.8M Apr 17 13:39 data/packetbeat/packetbeat-gffph/captures/packetbeat-20260417-9.ndjson
+-rw-r--r--. 1 benm benm 7.9M Apr 17 13:39 data/packetbeat/packetbeat-gffph/captures/packetbeat-20260417-10.ndjson

@@ -1,0 +1,10 @@
+{
+  "name": "packetbeat-6dqdw",
+  "cpu": "100m",
+  "memory": "100Mi"
+}
+{
+  "name": "packetbeat-gffph",
+  "cpu": "100m",
+  "memory": "100Mi"
+}

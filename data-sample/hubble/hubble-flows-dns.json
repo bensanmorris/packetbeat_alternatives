@@ -1,0 +1,3 @@
+{"lost_events":{"source":"HUBBLE_RING_BUFFER","num_events_lost":"1"},"node_name":"kind-cilium-poc/cilium-poc-control-plane","time":"2026-04-17T12:39:09.562020455Z"}
+{"lost_events":{"source":"HUBBLE_RING_BUFFER","num_events_lost":"1"},"node_name":"kind-cilium-poc/cilium-poc-worker","time":"2026-04-17T12:39:09.562500520Z"}
+{"lost_events":{"source":"HUBBLE_RING_BUFFER","num_events_lost":"1"},"node_name":"kind-cilium-poc/cilium-poc-worker2","time":"2026-04-17T12:39:09.562586365Z"}

@@ -1,0 +1,7 @@
+Hubble Flow Statistics
+======================
+
+Total flows: 12221
+HTTP flows: 3
+DNS flows: 3
+Dropped flows: 16

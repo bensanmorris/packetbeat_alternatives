@@ -6,8 +6,6 @@ Packetbeat being designed around Elastic ingest is quite verbose (approx 2-5k of
 
 [Cilium vs Packetbeat results from local RHEL9 demo machine](./reports/comparison-report-20260203-114043.txt)
 
-[Cilium vs Packetbeat sample test data (first 5000 captured events) can be found in the data-sample folder along with a companion README linked to here](./data-sample/README.md)
-
 ![Cilium capture screenshot](screenshot.png)
 
 ## Contents
@@ -45,6 +43,7 @@ cilium-packetbeat-poc/
 ├── collection/
 │   ├── collect-hubble-data.sh   # Collect Hubble flows and metrics
 │   ├── collect-packetbeat-data.sh # Collect Packetbeat captures
+│   ├── extract-cilium-byte-metrics.py # Extract byte/packet counters from Prometheus
 │   └── export-all.sh            # Export all data
 ├── analysis/
 │   ├── generate-report.sh       # Generate comparison report
@@ -85,25 +84,51 @@ kubectl apply -f deploy/test-app.yaml
 cilium hubble port-forward &
 ```
 
-### 3. Generate Traffic
+### 3. Deploy Error Scenarios (Recommended Test)
 ```bash
 chmod +x testing/*.sh
-./testing/generate-traffic.sh
+# This deploys error generators and enables L7 visibility
+./testing/deploy-error-scenarios.sh
+
+# Verify L7 visibility is working
+./testing/verify-l7-visibility.sh
 ```
 
-### 4. Collect Data (after 1-24 hours)
+### 4. Generate Traffic (Let Run 30-60 Minutes)
+```bash
+# Error scenarios generate traffic automatically every 30 seconds
+# Monitor in real-time (optional):
+kubectl logs -f -n demo deployment/error-generator
+```
+
+### 5. Collect Data with Byte Metrics (after 30-60 minutes)
 ```bash
 chmod +x collection/*.sh
+# Collects Hubble flows + Cilium byte metrics + Packetbeat data
+# Uses collection/extract-cilium-byte-metrics.py to parse Prometheus metrics
 ./collection/export-all.sh
 ```
 
-### 5. Analyze Results
+**What gets collected:**
+- Hubble flows (no byte counters in flow records)
+- **Cilium byte/packet metrics** (extracted via `collection/extract-cilium-byte-metrics.py`)
+- Packetbeat flows (with per-flow byte counters)
+
+**New data files created:**
+- `data/hubble/cilium-byte-metrics.json` - Byte/packet totals per pod (~12 KB)
+- `data/hubble/byte-metrics-summary.txt` - Human-readable summary
+
+### 6. Analyze Results
 ```bash
-chmod +x analysis/*.sh
-./analysis/generate-report.sh
+chmod +x testing/*.sh
+# Generates comprehensive comparison report
+./testing/analyze-error-scenarios.sh
+
+# View the report
+cat reports/error-scenarios-*.txt | less
 ```
 
-### 6. Share Your Results (Optional)
+### 7. Share Your Results (Optional)
 
 ```bash
 # First, analyze what data you collected
@@ -331,12 +356,24 @@ See [UPLOAD-DATA-GUIDE.md](UPLOAD-DATA-GUIDE.md) for detailed upload strategies.
 ## Expected Outputs
 
 After running `./collection/export-all.sh`:
-- `data/hubble-flows.json` - Hubble flow data
-- `data/hubble-metrics.txt` - Prometheus metrics
-- `data/packetbeat-data/` - Packetbeat capture files
-- `data/resource-usage.json` - CPU/Memory usage
 
-After running `./analysis/generate-report.sh`:
+**Hubble Data:**
+- `data/hubble/hubble-flows-all.json` - Network flow data
+- `data/hubble/cilium-byte-metrics.json` - **Byte/packet counters per pod** (NEW!)
+- `data/hubble/byte-metrics-summary.txt` - Human-readable metrics summary
+- `data/hubble/hubble-metrics-raw.txt` - Raw Prometheus metrics
+
+**Packetbeat Data:**
+- `data/packetbeat/packetbeat-combined.json` - Flow data with byte counters
+- `data/packetbeat/packetbeat-stats.txt` - Statistics
+
+**Other:**
+- `data/resource-usage.json` - CPU/Memory usage
+- `data/cluster/` - Cluster state snapshots
+
+**Note:** The updated `collect-hubble-data.sh` script now automatically extracts byte/packet counters from Cilium's Prometheus metrics, enabling fair comparison with Packetbeat's per-flow byte counters.
+
+After running `./testing/analyze-error-scenarios.sh`:
 - `reports/comparison-report.txt` - Summary report
 - `reports/protocol-coverage.txt` - Protocol analysis
 - `reports/resource-usage.txt` - Resource comparison

@@ -1,0 +1,31 @@
+---
+apiVersion: "cilium.io/v2"
+kind: CiliumNetworkPolicy
+metadata:
+  name: enable-l7-http-inspection
+  namespace: demo
+spec:
+  # Apply to all pods in demo namespace
+  endpointSelector: {}
+  
+  # Allow all ingress with HTTP L7 inspection on port 80
+  ingress:
+  - toPorts:
+    - ports:
+      - port: "80"
+        protocol: TCP
+      rules:
+        http:
+        - {}  # Allow all HTTP requests (just inspect them)
+  - {}  # Allow all other ingress traffic
+  
+  # Allow all egress with HTTP L7 inspection on port 80
+  egress:
+  - toPorts:
+    - ports:
+      - port: "80"
+        protocol: TCP
+      rules:
+        http:
+        - {}  # Allow all HTTP requests (just inspect them)
+  - {}  # Allow all other egress traffic

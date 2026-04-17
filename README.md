@@ -1,12 +1,20 @@
 # Cilium vs Packetbeat POC - RHEL9 + Podman
 
-Packetbeat being designed around Elastic ingest is quite verbose (approx 2-5k of metadata per event) vs Cilium's 200-500 bytes. This repo contains everything needed to run a side-by-side comparison of Cilium/Hubble and Packetbeat on RHEL9 using Podman.
+## TL;DR - Key Findings
 
-[A summary of specific error scenarios tested with cilium output for granularity inspection (the steps for which are provided below)](testing/POC-Live-Preview.md)
+**Surprising Result:** In flow-mode, Packetbeat is actually **30% smaller** than Hubble, not larger! The original 230:1 ratio was based on Packetbeat's transaction mode (capturing full HTTP payloads).
 
-[Cilium vs Packetbeat results from local RHEL9 demo machine](./reports/comparison-report-20260203-114043.txt)
+**The Real Difference:** It's not about storage—it's about **context vs granularity**:
+- **Hubble:** Kubernetes-native (pod names, namespaces, policy verdicts) - Perfect for cloud-native troubleshooting
+- **Packetbeat:** Network-native (per-flow byte/packet counters, duration) - Perfect for deep network analysis
 
-[Cilium vs Packetbeat sample test data (first 5000 captured events) can be found in the data-sample folder along with a companion README linked to here](./data-sample/README.md)
+**Recommended Approach:** Run Hubble always-on for Kubernetes context + deploy Packetbeat on-demand (24-48 hours) when you need per-flow byte granularity.
+
+📊 **[Read the full analysis report](data-sample/README.md)** - Complete comparison of 5,000 events from both tools, including storage efficiency, data richness comparison, coverage analysis, and recommended deployment strategy.
+
+---
+
+This repo contains everything needed to run a side-by-side comparison of Cilium/Hubble and Packetbeat on RHEL9 using Podman.
 
 ![Cilium capture screenshot](screenshot.png)
 
@@ -16,6 +24,7 @@ Packetbeat being designed around Elastic ingest is quite verbose (approx 2-5k of
 cilium-packetbeat-poc/
 ├── README.md                    # This file
 ├── TEST-RESULTS-SUMMARY.md      # Latest test results and findings
+├── diagnose-cilium.sh           # Troubleshoot Cilium installation issues
 ├── create-sample-data.sh        # Create sample data for Git upload
 ├── prepare-upload.sh            # Prepare test data for repository upload
 ├── analyze-collected-data.sh    # Analyze collected test data
@@ -34,6 +43,8 @@ cilium-packetbeat-poc/
 │   ├── deploy-error-scenarios.sh    # Deploy all error test scenarios
 │   ├── enable-l7-visibility.sh      # Enable L7 HTTP visibility for Cilium
 │   ├── verify-l7-visibility.sh      # Verify L7 is working
+│   ├── cilium-l7-policy.yaml        # Cilium L7 HTTP inspection policy
+│   ├── cleanup-demo.sh              # Clean up demo namespace
 │   ├── analyze-error-scenarios.sh   # Analyze error scenario results
 │   ├── error-generator.yaml         # Continuous error generation
 │   ├── backend-error-service.yaml   # Backend that returns specific status codes
@@ -45,6 +56,7 @@ cilium-packetbeat-poc/
 ├── collection/
 │   ├── collect-hubble-data.sh   # Collect Hubble flows and metrics
 │   ├── collect-packetbeat-data.sh # Collect Packetbeat captures
+│   ├── extract-cilium-byte-metrics.py # Extract byte/packet counters from Prometheus
 │   └── export-all.sh            # Export all data
 ├── analysis/
 │   ├── generate-report.sh       # Generate comparison report
@@ -77,33 +89,96 @@ cd cilium-packetbeat-poc
 ```bash
 chmod +x deploy/*.sh
 ./deploy/cilium-install.sh
-kubectl apply -f deploy/packetbeat-daemonset.yaml
+
+# Wait for Cilium to be fully ready (2-5 minutes for image pulls)
+# Nodes will show "NotReady" until Cilium CNI is running - this is normal!
+cilium status --wait
+
+# Troubleshooting: If pods stay pending after 5 minutes, run diagnostics
+# ./diagnose-cilium.sh
+
+# Once Cilium shows all "OK", deploy Packetbeat
 kubectl apply -f deploy/packetbeat-config.yaml
+kubectl apply -f deploy/packetbeat-daemonset.yaml
 kubectl apply -f deploy/test-app.yaml
 
 # Enable Hubble port-forwarding (required for CLI access)
 cilium hubble port-forward &
 ```
 
-### 3. Generate Traffic
-```bash
-chmod +x testing/*.sh
-./testing/generate-traffic.sh
+**Expected output from `cilium status --wait`:**
+```
+Cilium:             OK
+Operator:           OK
+Envoy DaemonSet:    OK
+Hubble Relay:       OK
 ```
 
-### 4. Collect Data (after 1-24 hours)
+### 3. Deploy Error Scenarios (Recommended Test)
+```bash
+chmod +x testing/*.sh
+
+# Deploy error generators and test applications
+./testing/deploy-error-scenarios.sh
+
+# Note: L7 HTTP visibility is optional and can cause connectivity issues
+# The test works perfectly fine with L3/L4 flow data (IPs, ports, protocols)
+# which is sufficient for the byte counter comparison
+
+# Verify traffic is flowing
+kubectl logs -n demo deployment/error-generator --tail=30
+```
+
+**Expected from error generator:**
+```
+✓ GET /status/400: 400
+✓ GET /status/401: 401
+✓ GET /status/404: 404
+✓ GET /status/500: 500
+```
+
+**What you'll capture (L3/L4 mode):**
+- Source/destination IPs and ports
+- Protocol information (TCP/UDP)
+- Network policy verdicts (FORWARDED/DROPPED)
+- Pod identity and labels
+- **Byte/packet counters** (from Cilium Prometheus metrics)
+
+### 4. Generate Traffic (Let Run 30-60 Minutes)
+```bash
+# Error scenarios generate traffic automatically every 30 seconds
+# Monitor in real-time (optional):
+kubectl logs -f -n demo deployment/error-generator
+```
+
+### 5. Collect Data with Byte Metrics (after 30-60 minutes)
 ```bash
 chmod +x collection/*.sh
+# Collects Hubble flows + Cilium byte metrics + Packetbeat data
+# Uses collection/extract-cilium-byte-metrics.py to parse Prometheus metrics
 ./collection/export-all.sh
 ```
 
-### 5. Analyze Results
+**What gets collected:**
+- Hubble flows (no byte counters in flow records)
+- **Cilium byte/packet metrics** (extracted via `collection/extract-cilium-byte-metrics.py`)
+- Packetbeat flows (with per-flow byte counters)
+
+**New data files created:**
+- `data/hubble/cilium-byte-metrics.json` - Byte/packet totals per pod (~12 KB)
+- `data/hubble/byte-metrics-summary.txt` - Human-readable summary
+
+### 6. Analyze Results
 ```bash
-chmod +x analysis/*.sh
-./analysis/generate-report.sh
+chmod +x testing/*.sh
+# Generates comprehensive comparison report
+./testing/analyze-error-scenarios.sh
+
+# View the report
+cat reports/error-scenarios-*.txt | less
 ```
 
-### 6. Share Your Results (Optional)
+### 7. Share Your Results (Optional)
 
 ```bash
 # First, analyze what data you collected
@@ -331,12 +406,24 @@ See [UPLOAD-DATA-GUIDE.md](UPLOAD-DATA-GUIDE.md) for detailed upload strategies.
 ## Expected Outputs
 
 After running `./collection/export-all.sh`:
-- `data/hubble-flows.json` - Hubble flow data
-- `data/hubble-metrics.txt` - Prometheus metrics
-- `data/packetbeat-data/` - Packetbeat capture files
-- `data/resource-usage.json` - CPU/Memory usage
 
-After running `./analysis/generate-report.sh`:
+**Hubble Data:**
+- `data/hubble/hubble-flows-all.json` - Network flow data
+- `data/hubble/cilium-byte-metrics.json` - **Byte/packet counters per pod** (NEW!)
+- `data/hubble/byte-metrics-summary.txt` - Human-readable metrics summary
+- `data/hubble/hubble-metrics-raw.txt` - Raw Prometheus metrics
+
+**Packetbeat Data:**
+- `data/packetbeat/packetbeat-combined.json` - Flow data with byte counters
+- `data/packetbeat/packetbeat-stats.txt` - Statistics
+
+**Other:**
+- `data/resource-usage.json` - CPU/Memory usage
+- `data/cluster/` - Cluster state snapshots
+
+**Note:** The updated `collect-hubble-data.sh` script now automatically extracts byte/packet counters from Cilium's Prometheus metrics, enabling fair comparison with Packetbeat's per-flow byte counters.
+
+After running `./testing/analyze-error-scenarios.sh`:
 - `reports/comparison-report.txt` - Summary report
 - `reports/protocol-coverage.txt` - Protocol analysis
 - `reports/resource-usage.txt` - Resource comparison

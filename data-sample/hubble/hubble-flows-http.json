@@ -1,3 +1,3 @@
-{"lost_events":{"source":"HUBBLE_RING_BUFFER","num_events_lost":"1"},"node_name":"kind-cilium-poc/cilium-poc-worker2","time":"2026-02-05T14:00:23.827115371Z"}
-{"lost_events":{"source":"HUBBLE_RING_BUFFER","num_events_lost":"1"},"node_name":"kind-cilium-poc/cilium-poc-worker","time":"2026-02-05T14:00:23.827218841Z"}
-{"lost_events":{"source":"HUBBLE_RING_BUFFER","num_events_lost":"1"},"node_name":"kind-cilium-poc/cilium-poc-control-plane","time":"2026-02-05T14:00:23.827363936Z"}
+{"lost_events":{"source":"HUBBLE_RING_BUFFER","num_events_lost":"1"},"node_name":"kind-cilium-poc/cilium-poc-worker2","time":"2026-04-17T12:39:09.492445832Z"}
+{"lost_events":{"source":"HUBBLE_RING_BUFFER","num_events_lost":"1"},"node_name":"kind-cilium-poc/cilium-poc-control-plane","time":"2026-04-17T12:39:09.493233674Z"}
+{"lost_events":{"source":"HUBBLE_RING_BUFFER","num_events_lost":"1"},"node_name":"kind-cilium-poc/cilium-poc-worker","time":"2026-04-17T12:39:09.493808394Z"}

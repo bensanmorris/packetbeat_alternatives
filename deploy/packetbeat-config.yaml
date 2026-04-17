@@ -10,43 +10,47 @@ data:
     # Network interface to capture from
     packetbeat.interfaces.device: any
     
-    # Protocols to monitor
-    packetbeat.protocols:
-    - type: icmp
-      enabled: true
+    # DISABLED: Protocol transaction capture
+    # To match Hubble's flow-level approach, we disable per-transaction protocol parsing
+    # This dramatically reduces event count (80x fewer events)
+    # Uncomment protocols below if you need transaction-level detail
     
-    - type: dns
-      ports: [53]
-      include_authorities: true
-      include_additionals: true
+    # packetbeat.protocols:
+    # - type: icmp
+    #   enabled: true
+    # 
+    # - type: dns
+    #   ports: [53]
+    #   include_authorities: false
+    #   include_additionals: false
+    # 
+    # - type: http
+    #   ports: [80, 8000, 8080, 8081, 9200]
+    #   send_request: false
+    #   send_response: false
+    # 
+    # - type: tls
+    #   ports: [443, 993, 995, 5223, 8443]
+    #   send_certificates: false
+    # 
+    # - type: mysql
+    #   ports: [3306]
+    # 
+    # - type: pgsql
+    #   ports: [5432]
+    # 
+    # - type: redis
+    #   ports: [6379]
+    # 
+    # - type: mongodb
+    #   ports: [27017]
     
-    - type: http
-      ports: [80, 8000, 8080, 8081, 9200]
-      send_request: true
-      send_response: true
-      include_body_for: ["application/json", "text/html"]
-      real_ip_header: "X-Forwarded-For"
-    
-    - type: tls
-      ports: [443, 993, 995, 5223, 8443]
-      send_certificates: true
-    
-    - type: mysql
-      ports: [3306]
-    
-    - type: pgsql
-      ports: [5432]
-    
-    - type: redis
-      ports: [6379]
-    
-    - type: mongodb
-      ports: [27017]
-    
-    # Network flows
+    # Network flows (FLOW-LEVEL CAPTURE - matches Hubble approach)
+    # This captures aggregated flow data similar to Cilium/Hubble
     packetbeat.flows:
-      timeout: 30s
-      period: 10s
+      timeout: 30s      # Flow timeout (how long before flow is considered complete)
+      period: 10s       # How often to report flow data
+      enabled: true
     
     # Output to file for comparison
     output.file:
@@ -66,16 +70,17 @@ data:
       keepfiles: 7
       permissions: 0644
     
-    # Processors
+    # Processors - MINIMAL METADATA (aligned with Hubble)
+    # Removed add_host_metadata to eliminate 800 bytes of repeated IPs/MACs per event
+    # Removed add_kubernetes_metadata to reduce redundant pod information
     processors:
-      - add_host_metadata:
-          netinfo.enabled: true
-      - add_kubernetes_metadata:
-          host: ${NODE_NAME}
-          indexers:
-            - ip_port:
-            - container:
       - drop_event:
           when:
             equals:
               source.ip: "127.0.0.1"
+      # Optional: Add minimal context without the bloat
+      - add_fields:
+          target: ''
+          fields:
+            cluster: cilium-poc
+            capture_mode: flow-level

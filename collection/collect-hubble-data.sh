@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "=== Collecting Hubble Data ==="
+echo "=== Collecting Hubble Data with Byte Metrics ==="
 echo ""
 
 # Create data directory
@@ -28,14 +28,14 @@ echo "  Collecting DNS flows..."
 hubble observe --protocol dns --last 5000 --output json > "$DATA_DIR/hubble-flows-dns.json" 2>/dev/null || true
 
 echo ""
-echo "Step 2: Collecting Hubble metrics..."
+echo "Step 2: Collecting Hubble Prometheus metrics..."
 # Port-forward Hubble metrics in background
 kubectl port-forward -n kube-system svc/hubble-metrics 9965:9965 > /dev/null 2>&1 &
 PF_PID=$!
 sleep 3
 
-if curl -s http://localhost:9965/metrics > "$DATA_DIR/hubble-metrics.txt"; then
-    echo "  ✓ Metrics collected"
+if curl -s http://localhost:9965/metrics > "$DATA_DIR/hubble-metrics-raw.txt"; then
+    echo "  ✓ Raw Prometheus metrics collected"
 else
     echo "  ⚠️  Could not collect metrics"
 fi
@@ -48,26 +48,50 @@ echo "Step 3: Collecting Cilium status..."
 cilium status > "$DATA_DIR/cilium-status.txt" 2>&1 || true
 
 echo ""
-echo "Step 4: Generating flow statistics..."
+echo "Step 4: Extracting Cilium byte/packet counters..."
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+if [ -f "$DATA_DIR/hubble-metrics-raw.txt" ] && [ -s "$DATA_DIR/hubble-metrics-raw.txt" ]; then
+    echo "  Using Python extraction script..."
+    
+    if [ -f "$SCRIPT_DIR/extract-cilium-byte-metrics.py" ]; then
+        python3 "$SCRIPT_DIR/extract-cilium-byte-metrics.py" \
+            "$DATA_DIR/hubble-metrics-raw.txt" \
+            "$DATA_DIR/cilium-byte-metrics.json" 2>/dev/null || {
+            echo "  ⚠️  Extraction failed, creating empty file"
+            echo "{}" > "$DATA_DIR/cilium-byte-metrics.json"
+        }
+    else
+        echo "  ⚠️  extract-cilium-byte-metrics.py not found"
+        echo "{}" > "$DATA_DIR/cilium-byte-metrics.json"
+    fi
+    
+    # Check if metrics were extracted
+    if [ -s "$DATA_DIR/cilium-byte-metrics.json" ] && grep -q "egress_bytes" "$DATA_DIR/cilium-byte-metrics.json" 2>/dev/null; then
+        POD_COUNT=$(grep -c '"egress_bytes"' "$DATA_DIR/cilium-byte-metrics.json" || echo "0")
+        METRICS_SIZE=$(du -h "$DATA_DIR/cilium-byte-metrics.json" | cut -f1)
+        echo "  ✓ Byte/packet metrics extracted: $POD_COUNT pods, $METRICS_SIZE"
+    else
+        echo "  ⚠️  No byte metrics found (no endpoints with traffic yet?)"
+    fi
+else
+    echo "  ⚠️  Skipping byte metrics (Prometheus data not available)"
+    echo "{}" > "$DATA_DIR/cilium-byte-metrics.json"
+fi
+
+echo ""
+echo "Step 5: Generating flow statistics..."
 if [ -f "$DATA_DIR/hubble-flows-all.json" ]; then
-    cat > "$DATA_DIR/hubble-stats.txt" <<EOF
+    cat > "$DATA_DIR/hubble-stats.txt" <<STATSEOF
 Hubble Flow Statistics
 ======================
 
-Total flows: $(cat "$DATA_DIR/hubble-flows-all.json" | wc -l)
-HTTP flows: $(cat "$DATA_DIR/hubble-flows-http.json" 2>/dev/null | wc -l || echo "0")
-DNS flows: $(cat "$DATA_DIR/hubble-flows-dns.json" 2>/dev/null | wc -l || echo "0")
-Dropped flows: $(cat "$DATA_DIR/hubble-flows-dropped.json" 2>/dev/null | wc -l || echo "0")
-
-Verdicts:
-$(cat "$DATA_DIR/hubble-flows-all.json" | jq -r '.verdict // "UNKNOWN"' 2>/dev/null | sort | uniq -c | sort -rn)
-
-Top source IPs:
-$(cat "$DATA_DIR/hubble-flows-all.json" | jq -r '.source.identity.labels[] // empty' 2>/dev/null | sort | uniq -c | sort -rn | head -10)
-
-Top destination IPs:
-$(cat "$DATA_DIR/hubble-flows-all.json" | jq -r '.destination.identity.labels[] // empty' 2>/dev/null | sort | uniq -c | sort -rn | head -10)
-EOF
+Total flows: $(wc -l < "$DATA_DIR/hubble-flows-all.json")
+HTTP flows: $(wc -l < "$DATA_DIR/hubble-flows-http.json" 2>/dev/null || echo "0")
+DNS flows: $(wc -l < "$DATA_DIR/hubble-flows-dns.json" 2>/dev/null || echo "0")
+Dropped flows: $(wc -l < "$DATA_DIR/hubble-flows-dropped.json" 2>/dev/null || echo "0")
+STATSEOF
     echo "  ✓ Statistics generated"
 fi
 
@@ -75,4 +99,14 @@ echo ""
 echo "=== Hubble Data Collection Complete ==="
 echo ""
 echo "Data saved to: $DATA_DIR/"
-ls -lh "$DATA_DIR/"
+ls -lh "$DATA_DIR/" | grep -v "^total"
+
+echo ""
+echo "Summary:"
+FLOW_COUNT=$(wc -l < "$DATA_DIR/hubble-flows-all.json" 2>/dev/null || echo "0")
+FLOW_SIZE=$(du -h "$DATA_DIR/hubble-flows-all.json" 2>/dev/null | cut -f1 || echo "N/A")
+METRICS_SIZE=$(du -h "$DATA_DIR/cilium-byte-metrics.json" 2>/dev/null | cut -f1 || echo "N/A")
+echo "  Flows collected:  $FLOW_COUNT ($FLOW_SIZE)"
+echo "  Byte metrics:     $METRICS_SIZE"
+echo ""
+echo "Next: Run ./collection/collect-packetbeat-data.sh"

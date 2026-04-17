@@ -105,11 +105,21 @@ Hubble Relay:       OK
 ### 3. Deploy Error Scenarios (Recommended Test)
 ```bash
 chmod +x testing/*.sh
-# This deploys error generators and enables L7 visibility
+
+# Deploy error generators and test applications
 ./testing/deploy-error-scenarios.sh
+
+# Enable L7 HTTP visibility on all demo pods
+./testing/enable-l7-visibility.sh
 
 # Verify L7 visibility is working
 ./testing/verify-l7-visibility.sh
+```
+
+**Expected from verify script:**
+```
+✓ L7 HTTP data found in Hubble
+✓ Seeing HTTP methods and status codes
 ```
 
 ### 4. Generate Traffic (Let Run 30-60 Minutes)

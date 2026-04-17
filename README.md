@@ -14,6 +14,7 @@ Packetbeat being designed around Elastic ingest is quite verbose (approx 2-5k of
 cilium-packetbeat-poc/
 ├── README.md                    # This file
 ├── TEST-RESULTS-SUMMARY.md      # Latest test results and findings
+├── diagnose-cilium.sh           # Troubleshoot Cilium installation issues
 ├── create-sample-data.sh        # Create sample data for Git upload
 ├── prepare-upload.sh            # Prepare test data for repository upload
 ├── analyze-collected-data.sh    # Analyze collected test data
@@ -76,12 +77,29 @@ cd cilium-packetbeat-poc
 ```bash
 chmod +x deploy/*.sh
 ./deploy/cilium-install.sh
-kubectl apply -f deploy/packetbeat-daemonset.yaml
+
+# Wait for Cilium to be fully ready (2-5 minutes for image pulls)
+# Nodes will show "NotReady" until Cilium CNI is running - this is normal!
+cilium status --wait
+
+# Troubleshooting: If pods stay pending after 5 minutes, run diagnostics
+# ./diagnose-cilium.sh
+
+# Once Cilium shows all "OK", deploy Packetbeat
 kubectl apply -f deploy/packetbeat-config.yaml
+kubectl apply -f deploy/packetbeat-daemonset.yaml
 kubectl apply -f deploy/test-app.yaml
 
 # Enable Hubble port-forwarding (required for CLI access)
 cilium hubble port-forward &
+```
+
+**Expected output from `cilium status --wait`:**
+```
+Cilium:             OK
+Operator:           OK
+Envoy DaemonSet:    OK
+Hubble Relay:       OK
 ```
 
 ### 3. Deploy Error Scenarios (Recommended Test)

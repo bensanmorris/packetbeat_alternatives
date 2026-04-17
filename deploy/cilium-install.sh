@@ -10,8 +10,7 @@ cilium install \
   --set hubble.relay.enabled=true \
   --set hubble.ui.enabled=true \
   --set prometheus.enabled=true \
-  --set operator.prometheus.enabled=true \
-  --set proxy.prometheus.enabled=true
+  --set operator.prometheus.enabled=true
 
 echo ""
 echo "Step 2: Waiting for Cilium to be ready..."

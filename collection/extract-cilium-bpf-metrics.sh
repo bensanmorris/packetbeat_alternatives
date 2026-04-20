@@ -1,13 +1,13 @@
 #!/bin/bash
 set -e
 
-# Extract byte/packet counters from Cilium eBPF maps
-# This is needed because Cilium 1.16+ removed per-endpoint byte counters from Prometheus metrics
+# Extract byte/packet counters from Cilium endpoints
+# Uses 'cilium endpoint get' text output to retrieve per-endpoint statistics
 
 OUTPUT_FILE="${1:-data/hubble/cilium-byte-metrics.json}"
 SUMMARY_FILE="${2:-data/hubble/byte-metrics-summary.txt}"
 
-echo "=== Extracting Cilium Byte/Packet Counters from eBPF Maps ==="
+echo "=== Extracting Cilium Byte/Packet Counters from Endpoints ==="
 echo ""
 
 # Create output directory
@@ -22,11 +22,36 @@ echo ""
 # Create temporary file for raw data
 TEMP_FILE=$(mktemp)
 
-# Collect endpoint stats from all Cilium pods
-for POD in $CILIUM_PODS; do
-    echo "  Collecting from $POD..."
-    kubectl exec -n kube-system "$POD" -- cilium bpf endpoint list 2>/dev/null >> "$TEMP_FILE" || true
-done
+# Collect endpoint IDs from first Cilium pod
+FIRST_POD=$(echo $CILIUM_PODS | awk '{print $1}')
+echo "  Getting endpoint list from $FIRST_POD..."
+
+# Get endpoints with their details (namespace, pod name)
+kubectl exec -n kube-system "$FIRST_POD" -- cilium endpoint list -o jsonpath='{range .items[*]}{.id}|{.status.external-identifiers.k8s-namespace}|{.status.external-identifiers.k8s-pod-name}{"\n"}{end}' 2>/dev/null > "$TEMP_FILE.endpoints"
+
+if [ ! -s "$TEMP_FILE.endpoints" ]; then
+    echo "  ⚠️  No endpoints found"
+    echo "{}" > "$OUTPUT_FILE"
+    exit 0
+fi
+
+echo "  Found $(wc -l < "$TEMP_FILE.endpoints") endpoints"
+echo ""
+
+# For each endpoint, get stats table
+while IFS='|' read -r ENDPOINT_ID NAMESPACE POD_NAME; do
+    if [ -z "$ENDPOINT_ID" ]; then
+        continue
+    fi
+    
+    echo "  Collecting stats for endpoint $ENDPOINT_ID ($NAMESPACE/$POD_NAME)..."
+    
+    # Get the stats table (appears after the JSON output)
+    kubectl exec -n kube-system "$FIRST_POD" -- cilium endpoint get "$ENDPOINT_ID" 2>&1 | \
+        awk '/REASON.*DIRECTION.*PACKETS.*BYTES/,/^$/' | \
+        sed "s/^/$ENDPOINT_ID|$NAMESPACE|$POD_NAME|/" >> "$TEMP_FILE" || true
+        
+done < "$TEMP_FILE.endpoints"
 
 echo ""
 echo "Parsing endpoint statistics..."
@@ -34,7 +59,6 @@ echo "Parsing endpoint statistics..."
 # Parse the output and convert to JSON
 python3 - "$TEMP_FILE" "$OUTPUT_FILE" <<'PYTHON'
 import sys
-import json
 import re
 
 input_file = sys.argv[1]
@@ -43,50 +67,64 @@ output_file = sys.argv[2]
 metrics = {}
 
 with open(input_file, 'r') as f:
-    lines = f.readlines()
-    
-    # Skip header lines
-    data_started = False
-    for line in lines:
+    for line in f:
         line = line.strip()
-        
-        # Skip empty lines and headers
-        if not line or line.startswith('ENDPOINT') or line.startswith('---'):
+        if not line or 'REASON' in line or 'FILE' in line:
             continue
             
-        # Parse endpoint data
-        # Format: ENDPOINT_ID  FLAGS  IDENTITY  INGRESS_BYTES  EGRESS_BYTES  INGRESS_PKTS  EGRESS_PKTS  ...
-        parts = line.split()
-        if len(parts) < 7:
+        # Format: ENDPOINT_ID|NAMESPACE|POD_NAME|REASON DIRECTION PACKETS BYTES ...
+        parts = line.split('|')
+        if len(parts) < 4:
+            continue
+            
+        endpoint_id = parts[0].strip()
+        namespace = parts[1].strip()
+        pod_name = parts[2].strip()
+        stats_line = parts[3].strip()
+        
+        # Parse stats line
+        stats_parts = stats_line.split()
+        if len(stats_parts) < 4:
             continue
             
         try:
-            endpoint_id = parts[0]
+            direction = stats_parts[1]  # INGRESS or EGRESS
+            packets = int(stats_parts[2])
+            bytes_val = int(stats_parts[3])
             
-            # Try to extract byte/packet stats
-            # The format varies, so we'll try to find numbers
-            numbers = [int(p) for p in parts if p.isdigit()]
+            # Create key
+            key = f"{namespace}/{pod_name}" if namespace and pod_name else f"endpoint_{endpoint_id}"
             
-            if len(numbers) >= 4:
-                # Assume: ingress_bytes, egress_bytes, ingress_packets, egress_packets
-                ingress_bytes = numbers[0] if len(numbers) > 0 else 0
-                egress_bytes = numbers[1] if len(numbers) > 1 else 0
-                ingress_packets = numbers[2] if len(numbers) > 2 else 0
-                egress_packets = numbers[3] if len(numbers) > 3 else 0
-                
-                metrics[f"endpoint_{endpoint_id}"] = {
+            # Initialize if needed
+            if key not in metrics:
+                metrics[key] = {
                     "endpoint_id": endpoint_id,
-                    "ingress_bytes": ingress_bytes,
-                    "egress_bytes": egress_bytes,
-                    "ingress_packets": ingress_packets,
-                    "egress_packets": egress_packets,
-                    "total_bytes": ingress_bytes + egress_bytes,
-                    "total_packets": ingress_packets + egress_packets
+                    "namespace": namespace,
+                    "pod_name": pod_name,
+                    "ingress_bytes": 0,
+                    "egress_bytes": 0,
+                    "ingress_packets": 0,
+                    "egress_packets": 0
                 }
+            
+            # Aggregate stats
+            if direction == "INGRESS":
+                metrics[key]["ingress_bytes"] += bytes_val
+                metrics[key]["ingress_packets"] += packets
+            elif direction == "EGRESS":
+                metrics[key]["egress_bytes"] += bytes_val
+                metrics[key]["egress_packets"] += packets
+                
         except (ValueError, IndexError):
             continue
 
+# Add totals
+for key in metrics:
+    metrics[key]["total_bytes"] = metrics[key]["ingress_bytes"] + metrics[key]["egress_bytes"]
+    metrics[key]["total_packets"] = metrics[key]["ingress_packets"] + metrics[key]["egress_packets"]
+
 # Write JSON output
+import json
 with open(output_file, 'w') as f:
     json.dump(metrics, f, indent=2, sort_keys=True)
 
@@ -135,7 +173,7 @@ with open(summary_file, 'w') as f:
     )[:10]
     
     for endpoint, data in sorted_endpoints:
-        f.write(f"{endpoint:20} {data.get('total_bytes', 0):>12,} bytes\n")
+        f.write(f"{endpoint:30} {data.get('total_bytes', 0):>12,} bytes\n")
 
 print(f"Summary written to {summary_file}")
 PYTHON2
@@ -144,7 +182,7 @@ PYTHON2
 fi
 
 # Cleanup
-rm -f "$TEMP_FILE"
+rm -f "$TEMP_FILE" "$TEMP_FILE.endpoints"
 
 echo ""
 echo "✓ Byte/packet metrics extracted to: $OUTPUT_FILE"

@@ -104,6 +104,25 @@ kubectl apply -f deploy/test-app.yaml
 
 # Enable Hubble port-forwarding (required for CLI access)
 cilium hubble port-forward &
+
+# Verify Prometheus metrics are enabled and accessible
+echo ""
+echo "Verifying Cilium Prometheus metrics..."
+kubectl get svc -n kube-system hubble-metrics
+
+# Test metrics endpoint
+kubectl port-forward -n kube-system svc/hubble-metrics 9965:9965 > /dev/null 2>&1 &
+METRICS_PF_PID=$!
+sleep 3
+
+if curl -s http://localhost:9965/metrics | grep -q "cilium_endpoint"; then
+    echo "✓ Cilium Prometheus metrics are working!"
+else
+    echo "⚠️  Warning: Cilium metrics may not be available"
+    echo "   This is needed for byte/packet counters"
+fi
+
+kill $METRICS_PF_PID 2>/dev/null
 ```
 
 **Expected output from `cilium status --wait`:**
@@ -112,6 +131,11 @@ Cilium:             OK
 Operator:           OK
 Envoy DaemonSet:    OK
 Hubble Relay:       OK
+```
+
+**Expected metrics verification:**
+```
+✓ Cilium Prometheus metrics are working!
 ```
 
 ### 3. Deploy Error Scenarios (Recommended Test)
@@ -152,11 +176,72 @@ kubectl logs -f -n demo deployment/error-generator
 ```
 
 ### 5. Collect Data with Byte Metrics (after 30-60 minutes)
+
+**IMPORTANT: First verify Cilium Prometheus metrics are available**
+
+```bash
+# Check if hubble-metrics service exists
+kubectl get svc -n kube-system hubble-metrics
+
+# If service exists, test metrics endpoint
+kubectl port-forward -n kube-system svc/hubble-metrics 9965:9965 &
+sleep 3
+curl -s http://localhost:9965/metrics | head -20
+# Should see metrics like: cilium_endpoint_egress_bytes_total
+kill %1  # Stop port-forward
+```
+
+**If metrics service is missing:**
+
+Cilium metrics may not be enabled by default. Enable them:
+
+```bash
+# Check current Cilium config
+cilium config view | grep prometheus
+
+# If prometheus.enabled is false, reinstall with metrics:
+cilium uninstall
+./deploy/cilium-install.sh  # Already has prometheus.enabled=true
+cilium status --wait
+
+# Verify metrics service now exists
+kubectl get svc -n kube-system hubble-metrics
+```
+
+**Collect all data:**
+
 ```bash
 chmod +x collection/*.sh
-# Collects Hubble flows + Cilium byte metrics + Packetbeat data
-# Uses collection/extract-cilium-byte-metrics.py to parse Prometheus metrics
+
+# Collects:
+# - Hubble flows (L3/L4 with pod context)
+# - Cilium byte/packet metrics from Prometheus
+# - Packetbeat flows (with embedded byte counters)
 ./collection/export-all.sh
+```
+
+**Verify byte metrics were collected:**
+
+```bash
+# Check files were created
+ls -lh data/hubble/cilium-byte-metrics.json
+ls -lh data/hubble/hubble-metrics-raw.txt
+
+# View sample metrics
+head -20 data/hubble/cilium-byte-metrics.json
+```
+
+**Expected output:**
+```json
+{
+  "demo/backend-error-capable-xxx": {
+    "egress_bytes": 123456,
+    "ingress_bytes": 234567,
+    "egress_packets": 100,
+    "ingress_packets": 150
+  },
+  ...
+}
 ```
 
 **What gets collected:**

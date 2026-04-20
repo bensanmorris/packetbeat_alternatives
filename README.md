@@ -142,6 +142,9 @@ Hubble Relay:       OK
 ```bash
 chmod +x testing/*.sh
 
+# Create demo namespace
+kubectl create namespace demo
+
 # Deploy error generators and test applications
 ./testing/deploy-error-scenarios.sh
 

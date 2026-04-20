@@ -14,6 +14,52 @@ However, Hubble provides critical **Kubernetes-native context** (pod names, name
 
 ---
 
+## Test Data Files
+
+This directory contains sample data collected during the 1-hour test run. Below is a breakdown of all files:
+
+### Hubble Data Files
+
+| File | Size | Records | Description |
+|------|------|---------|-------------|
+| [hubble-flows-all.json](hubble/hubble-flows-all.json) | 6.4 MB | 5,000 | All Hubble flows (all namespaces) |
+| [hubble-flows-demo.json](hubble/hubble-flows-demo.json) | 3.6 MB | 2,386 | Flows from demo namespace only |
+| [hubble-flows-dropped.json](hubble/hubble-flows-dropped.json) | 23 KB | 16 | Dropped flows (policy violations) |
+| [hubble-flows-http.json](hubble/hubble-flows-http.json) | 482 B | 3 | HTTP L7 flows (if L7 enabled) |
+| [hubble-flows-dns.json](hubble/hubble-flows-dns.json) | 482 B | 3 | DNS flows |
+| [hubble-stats.txt](hubble/hubble-stats.txt) | 111 B | - | Flow statistics summary |
+| [cilium-status.txt](hubble/cilium-status.txt) | 2.3 KB | - | Cilium status at collection time |
+
+**Note:** Hubble flows do NOT contain per-flow byte/packet counters. Cilium provides cluster-wide aggregated byte metrics (`drop_bytes_total`, `forward_bytes_total`) but not per-endpoint or per-flow counters. See [Cilium Metrics Documentation](https://docs.cilium.io/en/stable/observability/metrics/#drops-forwards-l3-l4).
+
+### Packetbeat Data Files
+
+| File | Size | Records | Description |
+|------|------|---------|-------------|
+| [packetbeat-combined.json](packetbeat/packetbeat-combined.json) | 4.5 MB | 5,000 | All Packetbeat flow records (sample) |
+| [packetbeat-stats.txt](packetbeat/packetbeat-stats.txt) | 3.3 KB | - | Event statistics summary |
+
+**Note:** Every Packetbeat flow record includes per-flow byte/packet counters (100% coverage).
+
+### Cluster Metadata Files
+
+| File | Size | Description |
+|------|------|-------------|
+| [cluster/nodes.txt](cluster/nodes.txt) | 719 B | Kubernetes nodes information |
+| [cluster/all-pods.txt](cluster/all-pods.txt) | 6.0 KB | All pods running during test |
+| [cluster/all-services.txt](cluster/all-services.txt) | 1.3 KB | All services configured |
+| [cluster/cilium-status.txt](cluster/cilium-status.txt) | 2.3 KB | Cilium status snapshot |
+
+### Resource Metrics Files
+
+| File | Size | Description |
+|------|------|-------------|
+| [metrics/cilium-resources.json](metrics/cilium-resources.json) | 186 B | Cilium pod resource usage |
+| [metrics/packetbeat-resources.json](metrics/packetbeat-resources.json) | 142 B | Packetbeat pod resource usage |
+| [metrics/pod-resources.txt](metrics/pod-resources.txt) | 33 B | Summary of resource consumption |
+
+---
+
 ## Storage Comparison
 
 | Metric | Hubble (All Flows) | Hubble (Demo Only) | Packetbeat (Flow Mode) |

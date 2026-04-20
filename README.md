@@ -90,17 +90,26 @@ cd cilium-packetbeat-poc
 chmod +x deploy/*.sh
 ./deploy/cilium-install.sh
 
-# Wait for Cilium to be fully ready (2-5 minutes for image pulls)
-# Nodes will show "NotReady" until Cilium CNI is running - this is normal!
+# Wait for Cilium to be fully ready (can take 10-15 minutes on first run)
+# Timeline:
+#   0-2 min:  Pods scheduled, pulling images (500MB+)
+#   2-5 min:  Init containers running
+#   5-10 min: Main containers starting, Cilium agent initializing
+#   10-15 min: All components ready, nodes become Ready
 cilium status --wait
 
-# Troubleshooting: If pods stay pending after 5 minutes, run diagnostics
+# If cilium status shows errors about "cilium.sock: connect: no such file or directory":
+# This is NORMAL during startup - the agent process is still initializing
+# Wait 3-5 more minutes and check again:
+sleep 180
+cilium status
+
+# Troubleshooting: If pods stay in error state after 15 minutes, run diagnostics
 # ./diagnose-cilium.sh
 
 # Once Cilium shows all "OK", deploy Packetbeat
 kubectl apply -f deploy/packetbeat-config.yaml
 kubectl apply -f deploy/packetbeat-daemonset.yaml
-kubectl apply -f deploy/test-app.yaml
 
 # Enable Hubble port-forwarding (required for CLI access)
 cilium hubble port-forward &
@@ -114,9 +123,29 @@ Envoy DaemonSet:    OK
 Hubble Relay:       OK
 ```
 
+**Common during startup (NOT errors - just wait):**
+```
+Error: dial unix /var/run/cilium/cilium.sock: no such file or directory
+→ Agent still initializing, wait 3-5 more minutes
+
+Pods: Pending (image pull)
+→ Normal, images are 500MB+, takes 2-5 minutes
+
+Pods: Running but "not ready"
+→ Normal, agent socket initializing, takes 5-10 minutes
+
+Nodes: NotReady
+→ Normal until Cilium CNI is running, then nodes become Ready
+```
+
+**Note:** The `hubble-metrics` service is created for compatibility, though byte/packet counters are extracted from eBPF maps rather than Prometheus metrics.
+
 ### 3. Deploy Error Scenarios (Recommended Test)
 ```bash
 chmod +x testing/*.sh
+
+# Create demo namespace
+kubectl create namespace demo
 
 # Deploy error generators and test applications
 ./testing/deploy-error-scenarios.sh
@@ -142,7 +171,7 @@ kubectl logs -n demo deployment/error-generator --tail=30
 - Protocol information (TCP/UDP)
 - Network policy verdicts (FORWARDED/DROPPED)
 - Pod identity and labels
-- **Byte/packet counters** (from Cilium Prometheus metrics)
+- **Byte/packet counters** (from Cilium eBPF maps)
 
 ### 4. Generate Traffic (Let Run 30-60 Minutes)
 ```bash
@@ -152,12 +181,59 @@ kubectl logs -f -n demo deployment/error-generator
 ```
 
 ### 5. Collect Data with Byte Metrics (after 30-60 minutes)
+
+**Byte metrics are extracted directly from Cilium's eBPF maps** (Cilium 1.16+ removed per-endpoint byte counters from Prometheus metrics)
+
 ```bash
 chmod +x collection/*.sh
-# Collects Hubble flows + Cilium byte metrics + Packetbeat data
-# Uses collection/extract-cilium-byte-metrics.py to parse Prometheus metrics
+
+# Collects:
+# - Hubble flows (L3/L4 with pod context)
+# - Cilium byte/packet metrics from eBPF maps
+# - Packetbeat flows (with embedded byte counters)
 ./collection/export-all.sh
 ```
+
+**Verify byte metrics were collected:**
+
+```bash
+# Check files were created
+ls -lh data/hubble/cilium-byte-metrics.json
+ls -lh data/hubble/byte-metrics-summary.txt
+
+# View summary
+cat data/hubble/byte-metrics-summary.txt
+```
+
+**Expected output:**
+```
+Cilium Byte/Packet Counter Summary
+==================================================
+
+Total endpoints:     6
+Total ingress bytes: 1,234,567
+Total egress bytes:  2,345,678
+Total bytes:         3,580,245
+
+Total ingress pkts:  12,345
+Total egress pkts:   23,456
+Total packets:       35,801
+
+Top 10 endpoints by total bytes:
+--------------------------------------------------
+endpoint_1377            1,234,567 bytes
+endpoint_2435              567,890 bytes
+...
+```
+
+**How it works:**
+
+The `extract-cilium-bpf-metrics.sh` script:
+1. Connects to each Cilium pod
+2. Runs `cilium bpf endpoint list` to get eBPF map data
+3. Parses byte/packet counters for each endpoint
+4. Aggregates into JSON format
+5. Generates human-readable summary
 
 **What gets collected:**
 - Hubble flows (no byte counters in flow records)

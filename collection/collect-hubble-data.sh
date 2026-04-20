@@ -48,35 +48,17 @@ echo "Step 3: Collecting Cilium status..."
 cilium status > "$DATA_DIR/cilium-status.txt" 2>&1 || true
 
 echo ""
-echo "Step 4: Extracting Cilium byte/packet counters..."
+echo "Step 4: Extracting Cilium byte/packet counters from eBPF maps..."
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-if [ -f "$DATA_DIR/hubble-metrics-raw.txt" ] && [ -s "$DATA_DIR/hubble-metrics-raw.txt" ]; then
-    echo "  Using Python extraction script..."
-    
-    if [ -f "$SCRIPT_DIR/extract-cilium-byte-metrics.py" ]; then
-        python3 "$SCRIPT_DIR/extract-cilium-byte-metrics.py" \
-            "$DATA_DIR/hubble-metrics-raw.txt" \
-            "$DATA_DIR/cilium-byte-metrics.json" 2>/dev/null || {
-            echo "  ⚠️  Extraction failed, creating empty file"
-            echo "{}" > "$DATA_DIR/cilium-byte-metrics.json"
-        }
-    else
-        echo "  ⚠️  extract-cilium-byte-metrics.py not found"
-        echo "{}" > "$DATA_DIR/cilium-byte-metrics.json"
-    fi
-    
-    # Check if metrics were extracted
-    if [ -s "$DATA_DIR/cilium-byte-metrics.json" ] && grep -q "egress_bytes" "$DATA_DIR/cilium-byte-metrics.json" 2>/dev/null; then
-        POD_COUNT=$(grep -c '"egress_bytes"' "$DATA_DIR/cilium-byte-metrics.json" || echo "0")
-        METRICS_SIZE=$(du -h "$DATA_DIR/cilium-byte-metrics.json" | cut -f1)
-        echo "  ✓ Byte/packet metrics extracted: $POD_COUNT pods, $METRICS_SIZE"
-    else
-        echo "  ⚠️  No byte metrics found (no endpoints with traffic yet?)"
-    fi
+if [ -f "$SCRIPT_DIR/extract-cilium-bpf-metrics.sh" ]; then
+    echo "  Using eBPF map extraction (Cilium 1.16+ compatible)..."
+    "$SCRIPT_DIR/extract-cilium-bpf-metrics.sh" \
+        "$DATA_DIR/cilium-byte-metrics.json" \
+        "$DATA_DIR/byte-metrics-summary.txt"
 else
-    echo "  ⚠️  Skipping byte metrics (Prometheus data not available)"
+    echo "  ⚠️  extract-cilium-bpf-metrics.sh not found"
     echo "{}" > "$DATA_DIR/cilium-byte-metrics.json"
 fi
 

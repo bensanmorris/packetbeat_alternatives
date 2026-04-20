@@ -8,6 +8,12 @@
 - **Hubble:** Kubernetes-native (pod names, namespaces, policy verdicts) - Perfect for cloud-native troubleshooting
 - **Packetbeat:** Network-native (per-flow byte/packet counters, duration) - Perfect for deep network analysis
 
+**Byte Counter Reality:**
+- **Cilium provides:** Cluster-wide aggregated byte metrics (`drop_bytes_total`, `forward_bytes_total`) - useful for overall traffic patterns
+- **Cilium does NOT provide:** Per-endpoint or per-flow byte counters - cannot tell you "how many bytes pod X sent to pod Y"
+- **Official source:** [Cilium Metrics Documentation - Drops/Forwards (L3/L4)](https://docs.cilium.io/en/stable/observability/metrics/#drops-forwards-l3-l4)
+- **Packetbeat provides:** Per-flow byte/packet counters in every flow record - complete granularity
+
 **Recommended Approach:** Run Hubble always-on for Kubernetes context + deploy Packetbeat on-demand (24-48 hours) when you need per-flow byte granularity.
 
 📊 **[Read the full analysis report](data-sample/README.md)** - Complete comparison of 5,000 events from both tools, including storage efficiency, data richness comparison, coverage analysis, and recommended deployment strategy.
